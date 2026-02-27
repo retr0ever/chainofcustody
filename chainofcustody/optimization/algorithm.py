@@ -103,15 +103,15 @@ def run(
 
     algorithm = build_algorithm(pop_size=pop_size, mutation_rate=mutation_rate)
 
-    callback = _ProgressCallback(progress, progress_task) if progress is not None else None
-
     minimize_kwargs = dict(
         termination=("n_gen", n_gen),
         seed=seed,
         verbose=verbose,
         save_history=True,
-        callback=callback,
     )
+
+    if progress is not None:
+        minimize_kwargs["callback"] = _ProgressCallback(progress, progress_task)
 
     if workers == 1:
         problem = SequenceProblem(seq_len=seq_len)
