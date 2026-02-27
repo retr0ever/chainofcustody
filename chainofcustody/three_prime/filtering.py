@@ -21,24 +21,26 @@ DB_DIR = Path(__file__).resolve().parent / "db"
 
 # ── data loading ────────────────────────────────────────────────────────────
 
-def _load_mature_sequences(db_dir: Path = DB_DIR) -> dict[str, str]:
-    """Return a mapping MiRBase_ID → mature sequence for human miRNAs."""
+def _load_mature_sequences(db_dir: Path = DB_DIR) -> tuple[dict[str, str], dict[str, str]]:
+    """Return mappings MiRBase_ID → mature sequence and MiRBase_ID → seed."""
     df_family = pd.read_csv(
         db_dir / "miR_Family_Info.txt",
         sep="\t",
-        usecols=["Species ID", "MiRBase ID", "Mature sequence"],
+        usecols=["Species ID", "MiRBase ID", "Mature sequence", "Seed+m8"],
     )
     df_human = df_family[df_family["Species ID"] == 9606].drop_duplicates(
         subset="MiRBase ID"
     )
-    return dict(zip(df_human["MiRBase ID"], df_human["Mature sequence"]))
+    mature_seqs = dict(zip(df_human["MiRBase ID"], df_human["Mature sequence"]))
+    seed_seqs = dict(zip(df_human["MiRBase ID"], df_human["Seed+m8"]))
+    return mature_seqs, seed_seqs
 
 
 def load_data(db_dir: Path = DB_DIR):
     """Return mature-sequence map, sample-level miRNA-expression matrix, and
     grouped cell-type × miRNA matrix with Shannon entropy column."""
 
-    mature_seqs = _load_mature_sequences(db_dir)
+    mature_seqs, seed_seqs = _load_mature_sequences(db_dir)
 
     df_samples = pd.read_csv(db_dir / "expression_matrix.csv", index_col=0)
     df_metadata = pd.read_csv(db_dir / "sample_metadata.csv", index_col=0)
@@ -65,7 +67,7 @@ def load_data(db_dir: Path = DB_DIR):
         .fillna(0.0)
     )
 
-    return mature_seqs, df_mirna_expr, df_grouped
+    return mature_seqs, seed_seqs, df_mirna_expr, df_grouped
 
 
 # ── core logic ──────────────────────────────────────────────────────────────
@@ -73,6 +75,7 @@ def load_data(db_dir: Path = DB_DIR):
 def mirnas_for_tissue(
     tissue: str,
     mature_seqs: dict[str, str],
+    seed_seqs: dict[str, str],
     df_mirna_expr: pd.DataFrame,
     df_grouped: pd.DataFrame,
     threshold: float = 0.0,
@@ -87,6 +90,8 @@ def mirnas_for_tissue(
         Cell-type / tissue name (must match a column in *df_grouped*).
     mature_seqs : dict[str, str]
         Mapping MiRBase_ID → mature sequence.
+    seed_seqs : dict[str, str]
+        Mapping MiRBase_ID → seed (nt 2-8) sequence.
     df_mirna_expr : DataFrame
         MiRNA × sample expression matrix (columns = cell-type labels).
     df_grouped : DataFrame
@@ -99,7 +104,7 @@ def mirnas_for_tissue(
     Returns
     -------
     DataFrame
-        Columns: MiRBase_ID, mature_sequence, mean_expr, shannon_entropy
+        Columns: MiRBase_ID, mature_sequence, seed, mean_expr, shannon_entropy
         — sorted by entropy ascending.
     """
     if tissue not in df_grouped.columns:
@@ -118,7 +123,7 @@ def mirnas_for_tissue(
 
     if candidates.empty:
         return pd.DataFrame(
-            columns=["MiRBase_ID", "mature_sequence", "mean_expr", "shannon_entropy"]
+            columns=["MiRBase_ID", "mature_sequence", "seed", "mean_expr", "shannon_entropy"]
         )
 
     # sort by entropy (ascending) and pick top_n
@@ -127,6 +132,7 @@ def mirnas_for_tissue(
     result = pd.DataFrame({
         "MiRBase_ID": candidates.index,
         "mature_sequence": [mature_seqs.get(mid, "") for mid in candidates.index],
+        "seed": [seed_seqs.get(mid, "") for mid in candidates.index],
         "mean_expr": tissue_expr.loc[candidates.index].values,
         "shannon_entropy": candidates["shannon_entropy"].values,
     }).reset_index(drop=True)
@@ -231,7 +237,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print("Loading data …")
-    mature_seqs, df_mirna_expr, df_grouped = load_data()
+    mature_seqs, seed_seqs, df_mirna_expr, df_grouped = load_data()
 
     if args.list_tissues:
         tissues = sorted(c for c in df_grouped.columns if c != "shannon_entropy")
@@ -243,6 +249,7 @@ def main() -> None:
     result = mirnas_for_tissue(
         tissue=args.tissue,
         mature_seqs=mature_seqs,
+        seed_seqs=seed_seqs,
         df_mirna_expr=df_mirna_expr,
         df_grouped=df_grouped,
         threshold=args.threshold,
@@ -257,11 +264,12 @@ def main() -> None:
     print(f"\nTissue : {args.tissue}")
     print(f"Threshold : {args.threshold}")
     print(f"Top {args.top} lowest-entropy miRNAs:\n")
-    print(f"{'MiRBase_ID':<22} {'Mature sequence':<28} {'Mean expr':>12} {'Entropy (H)':>12}")
-    print("-" * 76)
+    print(f"{'MiRBase_ID':<22} {'Mature sequence':<28} {'Seed':<10} {'Mean expr':>12} {'Entropy (H)':>12}")
+    print("-" * 86)
     for _, row in result.iterrows():
         print(
             f"{row['MiRBase_ID']:<22} {row['mature_sequence']:<28} "
+            f"{row['seed']:<10} "
             f"{row['mean_expr']:>12.2f} {row['shannon_entropy']:>12.4f}"
         )
 
