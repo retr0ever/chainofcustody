@@ -111,8 +111,9 @@ def evaluate(inputs: tuple[str, ...], gene: str | None, offtarget: str, target: 
 @click.option("--n-gen", type=int, default=50, show_default=True, help="Number of generations.")
 @click.option("--mutation-rate", type=float, default=0.01, show_default=True, help="Per-position mutation probability.")
 @click.option("--seed", type=int, default=None, help="Random seed for reproducibility.")
+@click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
-def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, output_fmt: str) -> None:
+def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str) -> None:
     """Run NSGA3 to evolve an optimal nucleotide sequence population."""
     import json
     import numpy as np
@@ -124,10 +125,11 @@ def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed
         f"\nRunning NSGA3 — seq_len=[bold]{seq_len}[/bold]  "
         f"pop_size=[bold]{pop_size}[/bold]  "
         f"n_gen=[bold]{n_gen}[/bold]  "
-        f"mutation_rate=[bold]{mutation_rate}[/bold]\n"
+        f"mutation_rate=[bold]{mutation_rate}[/bold]  "
+        f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]\n"
     )
 
-    X, F = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed)
+    X, F = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed, n_workers=workers)
 
     problem = SequenceProblem(seq_len=seq_len)
     sequences = problem.decode(X)

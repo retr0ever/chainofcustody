@@ -88,7 +88,7 @@ def test_optimize_summary_output(runner, mock_optimize_run, mock_scoring):
 
     assert result.exit_code == 0
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
-    mock_optimize_run.assert_called_once_with(seq_len=4, pop_size=10, n_gen=2, mutation_rate=0.01, seed=None)
+    mock_optimize_run.assert_called_once_with(seq_len=4, pop_size=10, n_gen=2, mutation_rate=0.01, seed=None, n_workers=None)
 
 
 def test_optimize_json_output(runner, mock_optimize_run, mock_scoring):

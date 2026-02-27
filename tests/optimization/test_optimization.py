@@ -22,22 +22,20 @@ def test_problem_dimensions():
 
 
 def test_problem_evaluate_shape():
+    """ElementwiseProblem._evaluate receives a single row; drive via evaluate()."""
     problem = SequenceProblem(seq_len=20)
     X = np.random.randint(0, 4, size=(10, 20))
-    out = {}
-    problem._evaluate(X, out)
-    assert out["F"].shape == (10, N_METRICS)
-    assert np.all((out["F"] >= 0) & (out["F"] <= 1))
+    result = problem.evaluate(X)
+    assert result.shape == (10, N_METRICS)
+    assert np.all((result >= 0) & (result <= 1))
 
 
 def test_problem_evaluate_returns_valid_scores():
     problem = SequenceProblem(seq_len=90)
     X = np.random.randint(0, 4, size=(3, 90))
-    out = {}
-    problem._evaluate(X, out)
-    # All objectives should be between 0 and 1 (1 - metric_score)
-    assert np.all(out["F"] >= 0)
-    assert np.all(out["F"] <= 1)
+    result = problem.evaluate(X)
+    assert np.all(result >= 0)
+    assert np.all(result <= 1)
 
 
 def test_problem_decode():
