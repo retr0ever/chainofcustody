@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import rich_click as click
 from rich.console import Console
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 from chainofcustody.evaluation.fitness import compute_fitness
 from chainofcustody.evaluation.report import print_batch_report, print_report, score_sequence
@@ -41,7 +42,22 @@ def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: in
         f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]\n"
     )
 
-    X, F, history = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed, n_workers=workers)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]Evolving[/bold blue] {task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("gen", total=n_gen)
+        X, F, history = run(
+            seq_len=seq_len, pop_size=pop_size, n_gen=n_gen,
+            mutation_rate=mutation_rate, seed=seed, n_workers=workers,
+            progress=progress, progress_task=task,
+        )
 
     problem = SequenceProblem(seq_len=seq_len)
     sequences = problem.decode(X)

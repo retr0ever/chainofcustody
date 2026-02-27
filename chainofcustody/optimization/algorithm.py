@@ -3,6 +3,7 @@ from multiprocessing.pool import Pool
 
 import numpy as np
 from pymoo.algorithms.moo.nsga3 import NSGA3
+from pymoo.core.callback import Callback
 from pymoo.operators.crossover.ux import UniformCrossover
 from pymoo.optimize import minimize
 from pymoo.parallelization.starmap import StarmapParallelization
@@ -13,6 +14,18 @@ from chainofcustody.optimization.operators import NucleotideMutation, Nucleotide
 from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem
 
 _DEFAULT_WORKERS = os.cpu_count() or 1
+
+
+class _ProgressCallback(Callback):
+    """Advance a Rich progress bar by one step after each generation."""
+
+    def __init__(self, progress, task) -> None:
+        super().__init__()
+        self._progress = progress
+        self._task = task
+
+    def notify(self, algorithm) -> None:
+        self._progress.advance(self._task)
 
 
 def build_algorithm(
@@ -62,6 +75,8 @@ def run(
     seed: int | None = None,
     verbose: bool = False,
     n_workers: int | None = None,
+    progress=None,
+    progress_task=None,
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
@@ -75,6 +90,8 @@ def run(
         n_workers: Number of worker processes for parallel fitness evaluation.
             Defaults to the number of logical CPU cores. Pass ``1`` to run
             single-threaded (no pool overhead).
+        progress: Optional Rich Progress instance for a live progress bar.
+        progress_task: Task ID returned by ``progress.add_task``.
 
     Returns:
         A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
@@ -86,11 +103,14 @@ def run(
 
     algorithm = build_algorithm(pop_size=pop_size, mutation_rate=mutation_rate)
 
+    callback = _ProgressCallback(progress, progress_task) if progress is not None else None
+
     minimize_kwargs = dict(
         termination=("n_gen", n_gen),
         seed=seed,
         verbose=verbose,
         save_history=True,
+        callback=callback,
     )
 
     if workers == 1:
