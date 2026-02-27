@@ -1,14 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "chainofcustody"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "mygene>=3.2.2",
+    "requests>=2.32.5",
+    "rich-click>=1.9.7",
+]
+
+[project.scripts]
+chainofcustody = "chainofcustody.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["chainofcustody"]
 
 [dependency-groups]
 dev = [
+    "hatchling>=1.29.0",
     "pytest>=9.0.2",
+    "pytest-mock>=3.15.1",
 ]
 
 [tool.pytest.ini_options]
