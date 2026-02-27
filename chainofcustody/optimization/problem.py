@@ -27,12 +27,10 @@ class SequenceProblem(Problem):
         )
 
     def _evaluate(self, X: np.ndarray, out: dict, *args, **kwargs) -> None:
-        n_pos = X.shape[1]
-        # Fraction of each nucleotide per sequence (minimised by NSGA3).
-        # Encoding: 0=A, 1=C, 2=G, 3=T
-        frac_a = np.sum(X == 0, axis=1) / n_pos
-        frac_c = np.sum(X == 1, axis=1) / n_pos
-        frac_t = np.sum(X == 3, axis=1) / n_pos
+        sequences = self.decode(X)
+        frac_a = np.array([s.count("A") / len(s) for s in sequences])
+        frac_c = np.array([s.count("C") / len(s) for s in sequences])
+        frac_t = np.array([s.count("T") / len(s) for s in sequences])
         out["F"] = np.column_stack([frac_a, frac_c, frac_t])
 
     def decode(self, X: np.ndarray) -> list[str]:
