@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "chainofcustody"
 version = "0.1.0"
@@ -10,8 +14,15 @@ dependencies = [
     "rich-click>=1.9.7",
 ]
 
+[project.scripts]
+chainofcustody = "chainofcustody.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["chainofcustody"]
+
 [dependency-groups]
 dev = [
+    "hatchling>=1.29.0",
     "pytest>=9.0.2",
     "pytest-mock>=3.15.1",
 ]

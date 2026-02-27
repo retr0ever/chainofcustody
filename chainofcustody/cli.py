@@ -16,7 +16,3 @@ def main(gene_symbol: str) -> None:
     except GeneNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise SystemExit(1)
-
-
-if __name__ == "__main__":
-    main()
