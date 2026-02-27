@@ -50,7 +50,7 @@ def build_algorithm(
     )
 
 
-def _build_history(result) -> list[dict]:
+def _build_history(result, cds: str, utr3: str) -> list[dict]:
     """Extract per-generation population snapshots from a pymoo result."""
     records = []
     for gen_state in result.history:
@@ -60,7 +60,8 @@ def _build_history(result) -> list[dict]:
         if X is None or F is None:
             continue
         for x_row, f_row in zip(X, F):
-            seq = "".join(NUCLEOTIDES[x_row])
+            utr5 = "".join(NUCLEOTIDES[x_row])
+            seq = utr5 + cds + utr3
             scores = {m: round(1.0 - float(f_val), 4) for m, f_val in zip(METRIC_NAMES, f_row)}
             overall = round(sum(scores[m] * DEFAULT_WEIGHTS.get(m, 0) for m in METRIC_NAMES), 4)
             records.append({"generation": gen, "sequence": seq, **scores, "overall": overall})
@@ -68,7 +69,9 @@ def _build_history(result) -> list[dict]:
 
 
 def run(
-    seq_len: int = 100,
+    utr5_len: int = 62,
+    cds: str = "",
+    utr3: str = "",
     pop_size: int = 128,
     n_gen: int = 50,
     mutation_rate: float = 0.01,
@@ -80,8 +83,14 @@ def run(
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
+    The genetic algorithm evolves only the 5'UTR region. The CDS and 3'UTR are
+    fixed and concatenated to the evolved 5'UTR before each evaluation.
+
     Args:
-        seq_len: Length of each candidate nucleotide sequence.
+        utr5_len: Length of the 5'UTR region to evolve.
+        cds: Fixed CDS sequence (RNA, uppercase). Obtained from Ensembl via
+            ``get_canonical_cds`` and converted to RNA before passing in.
+        utr3: Fixed 3'UTR sequence (RNA, uppercase).
         pop_size: Population size.
         n_gen: Number of generations to evolve.
         mutation_rate: Per-position point-mutation probability.
@@ -95,9 +104,9 @@ def run(
 
     Returns:
         A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
-        Pareto-front population, ``F`` are the corresponding objective values,
-        and ``history`` is a list of per-generation population records suitable
-        for CSV export.
+        Pareto-front 5'UTR population, ``F`` are the corresponding objective
+        values, and ``history`` is a list of per-generation population records
+        (full assembled sequences) suitable for CSV export.
     """
     workers = n_workers if n_workers is not None else _DEFAULT_WORKERS
 
@@ -114,12 +123,12 @@ def run(
         minimize_kwargs["callback"] = _ProgressCallback(progress, progress_task)
 
     if workers == 1:
-        problem = SequenceProblem(seq_len=seq_len)
+        problem = SequenceProblem(utr5_len=utr5_len, cds=cds, utr3=utr3)
         result = minimize(problem, algorithm, **minimize_kwargs)
     else:
         with Pool(workers) as pool:
             runner = StarmapParallelization(pool.starmap)
-            problem = SequenceProblem(seq_len=seq_len, elementwise_runner=runner)
+            problem = SequenceProblem(utr5_len=utr5_len, cds=cds, utr3=utr3, elementwise_runner=runner)
             result = minimize(problem, algorithm, **minimize_kwargs)
 
-    return result.X, result.F, _build_history(result)
+    return result.X, result.F, _build_history(result, cds, utr3)

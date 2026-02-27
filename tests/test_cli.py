@@ -3,10 +3,22 @@ from click.testing import CliRunner
 
 from chainofcustody.cli import main
 
+_GENE = "TP53"
+_CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
+_UTR3 = "GAGTAGUCCC"
+
 
 @pytest.fixture
 def runner():
     return CliRunner()
+
+
+@pytest.fixture
+def mock_get_cds(mocker):
+    """Mock Ensembl CDS lookup so tests don't need network access."""
+    mock = mocker.patch("chainofcustody.cli.get_canonical_cds")
+    mock.return_value = _CDS.replace("U", "T")  # returns DNA like the real function
+    return mock
 
 
 @pytest.fixture
@@ -15,7 +27,7 @@ def mock_optimize_run(mocker):
     from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES
     mock = mocker.patch("chainofcustody.cli.run")
     mock_history = [
-        {"generation": g, "sequence": "ACGU", **{m: 0.8 for m in METRIC_NAMES}, "overall": 0.8}
+        {"generation": g, "sequence": "ACGU" + _CDS + _UTR3, **{m: 0.8 for m in METRIC_NAMES}, "overall": 0.8}
         for g in range(1, 4)
     ]
     mock.return_value = (
@@ -54,48 +66,48 @@ def test_help(runner):
     assert "NSGA3" in result.output
 
 
-def test_summary_output(runner, mock_optimize_run, mock_scoring):
-    result = runner.invoke(main, ["--seq-len", "4", "--pop-size", "10", "--n-gen", "2"])
+def test_summary_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+    result = runner.invoke(main, ["--gene", _GENE, "--utr5-len", "4", "--pop-size", "10", "--n-gen", "2"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
     _, kwargs = mock_optimize_run.call_args
-    assert {k: kwargs[k] for k in ("seq_len", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
-        "seq_len": 4, "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
+    assert {k: kwargs[k] for k in ("utr5_len", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
+        "utr5_len": 4, "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
     }
 
 
-def test_json_output(runner, mock_optimize_run, mock_scoring):
-    result = runner.invoke(main, ["--seq-len", "4", "--output", "json"])
+def test_json_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+    result = runner.invoke(main, ["--gene", _GENE, "--output", "json"])
 
     assert result.exit_code == 0
     assert "fitness" in result.output
 
 
-def test_custom_mutation_rate(runner, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--mutation-rate", "0.05"])
+def test_custom_mutation_rate(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+    runner.invoke(main, ["--gene", _GENE, "--mutation-rate", "0.05"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["mutation_rate"] == 0.05
 
 
-def test_seed_is_passed(runner, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--seed", "42"])
+def test_seed_is_passed(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+    runner.invoke(main, ["--gene", _GENE, "--seed", "42"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["seed"] == 42
 
 
-def test_workers_is_passed(runner, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--workers", "4"])
+def test_workers_is_passed(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+    runner.invoke(main, ["--gene", _GENE, "--workers", "4"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["n_workers"] == 4
 
 
-def test_csv_output(runner, mock_optimize_run, mock_scoring, tmp_path):
+def test_csv_output(runner, mock_get_cds, mock_optimize_run, mock_scoring, tmp_path):
     csv_file = tmp_path / "history.csv"
-    result = runner.invoke(main, ["--seq-len", "4", "--csv", str(csv_file)])
+    result = runner.invoke(main, ["--gene", _GENE, "--utr5-len", "4", "--csv", str(csv_file)])
 
     assert result.exit_code == 0
     assert csv_file.exists()
@@ -105,3 +117,12 @@ def test_csv_output(runner, mock_optimize_run, mock_scoring, tmp_path):
     rows = list(csv_mod.DictReader(csv_file.open()))
     assert len(rows) == 3
     assert set(rows[0].keys()) >= {"generation", "sequence", "overall"}
+
+
+def test_gene_not_found(runner, mocker):
+    from chainofcustody.initial import GeneNotFoundError
+    mocker.patch("chainofcustody.cli.get_canonical_cds", side_effect=GeneNotFoundError("BADGENE not found"))
+    result = runner.invoke(main, ["--gene", "BADGENE"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output

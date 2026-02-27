@@ -6,7 +6,8 @@ from chainofcustody.optimization.problem import N_NUCLEOTIDES, NUCLEOTIDES
 
 _NUCLEOTIDE_INDEX = {nt: i for i, nt in enumerate(NUCLEOTIDES)}
 
-SEED_SEQUENCE = "GAGTAGTCCCTTCGCAAGCCCTCATTTCACCAGGCCCCCGGCTTGGGGCGCCTTCCTTCCCC"
+# Shared UTR sequence used as seed for 5'UTR evolution and as the fixed 3'UTR.
+UTR_SEED = "GAGTAGTCCCTTCGCAAGCCCTCATTTCACCAGGCCCCCGGCTTGGGGCGCCTTCCTTCCCC"
 
 
 def _encode(seq: str) -> np.ndarray:
@@ -18,12 +19,12 @@ def _encode(seq: str) -> np.ndarray:
 
 
 class NucleotideSampling(Sampling):
-    """Seed the initial population from SEED_SEQUENCE with random mutations.
+    """Seed the initial 5'UTR population from UTR_SEED with random mutations.
 
-    The seed is tiled/trimmed to match the problem's sequence length, then each
-    individual in the population is independently mutated at every position with
-    probability ``seed_mutation_rate`` so the optimizer starts with diversity
-    around the known good sequence rather than a purely random population.
+    The seed is tiled/trimmed to match the 5'UTR length (problem.n_var), then
+    each individual is independently mutated at every position with probability
+    ``seed_mutation_rate`` so the optimizer starts with diversity around the
+    known good sequence rather than a purely random population.
     """
 
     def __init__(self, seed_mutation_rate: float = 0.1) -> None:
@@ -31,14 +32,14 @@ class NucleotideSampling(Sampling):
         self.seed_mutation_rate = seed_mutation_rate
 
     def _do(self, problem, n_samples: int, **kwargs) -> np.ndarray:
-        seq_len = problem.n_var
-        seed = _encode(SEED_SEQUENCE)
+        utr5_len = problem.n_var
+        seed = _encode(UTR_SEED)
 
         # Tile or trim the seed to the required length
-        if len(seed) < seq_len:
-            repeats = -(-seq_len // len(seed))  # ceiling division
+        if len(seed) < utr5_len:
+            repeats = -(-utr5_len // len(seed))  # ceiling division
             seed = np.tile(seed, repeats)
-        seed = seed[:seq_len]
+        seed = seed[:utr5_len]
 
         population = np.tile(seed, (n_samples, 1))
         mask = np.random.random(population.shape) < self.seed_mutation_rate
