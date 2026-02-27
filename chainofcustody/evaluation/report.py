@@ -237,36 +237,30 @@ def _metric_label(metric: str) -> str:
     return labels.get(metric, metric)
 
 
-def _metric_value(metric: str, report: dict) -> str:
-    if metric == "codon_quality":
-        return f"CAI {report['codon_scores']['cai']}"
-    if metric == "gc_content":
-        return f"{report['codon_scores']['gc_content']['cds']}%"
-    if metric == "mir122_detargeting":
-        sites = report["mirna_scores"]["detargeting"].get("miR-122-5p", {}).get("utr3_sites", 0)
-        return f"{sites} site{'s' if sites != 1 else ''}"
+def _metric_value(metric: str, report: dict, fitness: dict) -> str:
     if metric == "utr5_accessibility":
         mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
         return f"{mfe} kcal" if mfe is not None else "N/A"
+    return f"{fitness['scores'][metric]['value']:.2f}"
+
+
+def _metric_hint(metric: str, report: dict) -> str:
+    if metric == "codon_quality":
+        return f"CAI {report['codon_scores']['cai']}"
+    if metric == "gc_content":
+        return f"CDS {report['codon_scores']['gc_content']['cds']}%"
+    if metric == "mir122_detargeting":
+        sites = report["mirna_scores"]["detargeting"].get("miR-122-5p", {}).get("utr3_sites", 0)
+        return f"{sites} site{'s' if sites != 1 else ''} in 3'UTR"
+    if metric == "utr5_accessibility":
+        return "> -20 for green"
     if metric == "manufacturability":
         v = report["manufacturing_scores"]["total_violations"]
-        return f"{v} issue{'s' if v != 1 else ''}"
+        return f"{v} violation{'s' if v != 1 else ''}"
     if metric == "stability":
-        s = report.get("stability_scores", {}).get("stability_score", 0)
-        return f"{s:.2f}"
+        stab = report.get("stability_scores", {})
+        return f"GC3 {stab.get('gc3', 0):.0%}, {stab.get('au_rich_elements', 0)} AREs"
     return ""
-
-
-def _metric_hint(metric: str) -> str:
-    hints = {
-        "codon_quality": ">0.8 for green",
-        "gc_content": "40-60% ideal",
-        "mir122_detargeting": "need 3+ in 3'UTR",
-        "utr5_accessibility": "> -20 for green",
-        "manufacturability": "0 = green",
-        "stability": ">0.7 for green",
-    }
-    return hints.get(metric, "")
 
 
 def print_report(console: Console, report: dict, label: str | None = None) -> None:
@@ -301,9 +295,9 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     for metric, status in summary.items():
         table.add_row(
             _metric_label(metric),
-            _metric_value(metric, report),
+            _metric_value(metric, report, fitness),
             _styled_status(status),
-            _metric_hint(metric),
+            _metric_hint(metric, report),
         )
 
     console.print()
@@ -431,6 +425,12 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     console.print()
 
 
+def _score_cell(value: float, status: str) -> Text:
+    """Format a normalised 0-1 score with status colour."""
+    colour = STATUS_COLOURS.get(status, "dim")
+    return Text(f"{value:.2f}", style=colour)
+
+
 def print_batch_report(console: Console, results: list[dict]) -> None:
     """Print a ranked comparison table for multiple candidates."""
     console.print()
@@ -438,32 +438,38 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
     table = Table(title="Candidate Ranking", show_header=True, header_style="bold", padding=(0, 1))
     table.add_column("Rank", justify="right", style="bold")
     table.add_column("Candidate")
-    table.add_column("CAI", justify="right")
-    table.add_column("GC", justify="center")
-    table.add_column("miR-122", justify="center")
+    table.add_column("Codon", justify="right")
+    table.add_column("GC", justify="right")
+    table.add_column("miR-122", justify="right")
     table.add_column("5'UTR", justify="center")
-    table.add_column("Mfg", justify="center")
-    table.add_column("Stab", justify="center")
-    table.add_column("Score", justify="right", style="bold")
+    table.add_column("Mfg", justify="right")
+    table.add_column("Stab", justify="right")
+    table.add_column("Overall", justify="right", style="bold")
 
     for i, r in enumerate(results, 1):
         report = r["report"]
         fitness = r["fitness"]
         summary = report["summary"]
+        scores = fitness["scores"]
 
-        score = fitness["overall"]
-        score_style = "green" if score >= 0.7 else "yellow" if score >= 0.4 else "red"
+        overall = fitness["overall"]
+        overall_style = "green" if overall >= 0.7 else "yellow" if overall >= 0.4 else "red"
+
+        mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
+        utr5_status = summary.get("utr5_accessibility", "GREY")
+        utr5_colour = STATUS_COLOURS.get(utr5_status, "dim")
+        utr5_text = Text(f"{mfe}" if mfe is not None else "N/A", style=utr5_colour)
 
         table.add_row(
             str(i),
             r["label"],
-            str(report["codon_scores"]["cai"]),
-            _styled_status(summary["gc_content"]),
-            _metric_value("mir122_detargeting", report),
-            _styled_status(summary["utr5_accessibility"]),
-            _styled_status(summary["manufacturability"]),
-            _styled_status(summary.get("stability", "GREY")),
-            Text(f"{score:.2f}", style=score_style),
+            _score_cell(scores["codon_quality"]["value"], summary["codon_quality"]),
+            _score_cell(scores["gc_content"]["value"], summary["gc_content"]),
+            _score_cell(scores["mir122_detargeting"]["value"], summary["mir122_detargeting"]),
+            utr5_text,
+            _score_cell(scores["manufacturability"]["value"], summary["manufacturability"]),
+            _score_cell(scores["stability"]["value"], summary.get("stability", "GREY")),
+            Text(f"{overall:.2f}", style=overall_style),
         )
 
     console.print(table)

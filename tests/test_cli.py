@@ -13,7 +13,7 @@ def runner():
 def mock_optimize_run(mocker):
     import numpy as np
     from chainofcustody.optimization.problem import N_OBJECTIVES
-    mock = mocker.patch("chainofcustody.optimization.run")
+    mock = mocker.patch("chainofcustody.cli.run")
     mock.return_value = (
         np.array([[0, 1, 2, 3]] * 3),
         np.array([[0.3] * N_OBJECTIVES] * 3),
@@ -23,11 +23,8 @@ def mock_optimize_run(mocker):
 
 @pytest.fixture
 def mock_scoring(mocker):
-    """Mock the evaluation pipeline so optimize tests don't need ViennaRNA etc."""
-    mock_score = mocker.patch("chainofcustody.cli.score_sequence", create=True)
-    mock_fitness = mocker.patch("chainofcustody.cli.compute_fitness", create=True)
-
-    mock_score = mocker.patch("chainofcustody.evaluation.report.score_sequence")
+    """Mock score_sequence so optimize tests don't need ViennaRNA etc."""
+    mock_score = mocker.patch("chainofcustody.cli.score_sequence")
     mock_score.return_value = {
         "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
         "codon_scores": {"cai": 0.8, "gc_content": {"overall": 50, "cds": 50}, "liver_selectivity": 0.0},
