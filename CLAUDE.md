@@ -57,7 +57,7 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 | codon_quality | 15% | CAI >= 0.8 | Human codon adaptation |
 | gc_content | 10% | CDS 40-60% | Nucleotide composition balance |
 | mir122_detargeting | 25% | 3+ sites in 3'UTR | Liver-specific silencing |
-| utr5_accessibility | 10% | MFE > -20 kcal/mol | Ribosome loading |
+| utr5_accessibility | 10% | MFE < -30 kcal/mol | 5'UTR structure stability |
 | manufacturability | 15% | 0 violations | DNA synthesis feasibility |
 | stability | 25% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt, AREs) |
 
