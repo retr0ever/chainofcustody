@@ -9,7 +9,9 @@ Pipeline
 3. Parse miRBase ``mature.fa`` to get a human miRNA name → accession →
    sequence lookup (useful for cross-referencing).
 4. Join expression data with the seed map so that every (cell_type, miRNA)
-   pair carries its seed sequence. Filter such that only miRNAs with a count > 10 in at least one sample of the cell type are included.
+   pair carries its seed sequence.  The expression matrix is normalised to
+   **RPM** (Reads Per Million) before any downstream use.  Only miRNAs with
+   RPM > 10 in at least one sample of the cell type are retained.
 """
 
 from pathlib import Path
@@ -35,12 +37,13 @@ EXCLUDED_CLASSES = {"Plasma", "Sperm"}
 # 1. microRNAome expression data & metadata (via R / Bioconductor)
 # ---------------------------------------------------------------------------
 def load_microRNAome() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Download (once) and return the microRNAome dataset.
+    """Download (once) and return the microRNAome dataset, RPM-normalised.
 
     Returns
     -------
     expr_df : pd.DataFrame
-        Raw read counts – rows are miRNAs, columns are SRR sample IDs.
+        RPM-normalised counts – rows are miRNAs, columns are SRR sample IDs.
+        RPM = (raw_count / library_size) × 1 000 000.
     meta_df : pd.DataFrame
         Per-sample metadata including ``CellType``.
     """
@@ -66,6 +69,11 @@ def load_microRNAome() -> tuple[pd.DataFrame, pd.DataFrame]:
     with localconverter(ro.default_converter + pandas2ri.converter):
         expr_df = ro.conversion.rpy2py(ro.globalenv['expr_matrix'])
         meta_df = ro.conversion.rpy2py(ro.globalenv['metadata'])
+
+    # ---- RPM normalisation ------------------------------------------------
+    library_sizes = expr_df.sum(axis=0)           # total counts per sample
+    expr_df = expr_df.div(library_sizes, axis=1) * 1e6
+    print("Expression matrix normalised to RPM.")
 
     return expr_df, meta_df
 
@@ -135,13 +143,13 @@ def build_cell_type_seed_map(
 ) -> pd.DataFrame:
     """For each cell type, find expressed miRNAs and annotate with their seed.
 
-    A miRNA is considered *expressed* in a cell type when its raw count is > 0
+    A miRNA is considered *expressed* in a cell type when its RPM is > 10
     in **at least one** sample belonging to that cell type.
 
-    For every miRNA the distribution of counts across the experiments
+    For every miRNA the distribution of RPM values across the experiments
     (samples) belonging to that cell type is summarised with: mean, median,
     standard deviation, min, max, the number of samples that express it
-    (count > 0), and the total number of samples in the cell type.
+    (RPM > 0), and the total number of samples in the cell type.
 
     Returns
     -------
