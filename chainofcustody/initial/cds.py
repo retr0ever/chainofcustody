@@ -10,11 +10,11 @@ class GeneNotFoundError(Exception):
     pass
 
 
-def _resolve_ensembl_gene_id(gene_symbol: str, species: str) -> str:
-    result = _mg.query(gene_symbol, species=species, fields="ensembl.gene", size=1)
+def _resolve_ensembl_gene_id(gene_symbol: str) -> str:
+    result = _mg.query(gene_symbol, species="human", fields="ensembl.gene", size=1)
     hits = result.get("hits", [])
     if not hits:
-        raise GeneNotFoundError(f"Gene '{gene_symbol}' not found for species '{species}'")
+        raise GeneNotFoundError(f"Gene '{gene_symbol}' not found")
 
     ensembl = hits[0].get("ensembl")
     if not ensembl:
@@ -45,15 +45,14 @@ def _fetch_cds(transcript_id: str) -> str:
     return response.json()["seq"]
 
 
-def get_canonical_cds(gene_symbol: str, species: str = "human") -> str:
-    """Return the canonical CDS sequence for a gene symbol.
+def get_canonical_cds(gene_symbol: str) -> str:
+    """Return the canonical CDS sequence for a human gene symbol.
 
     Resolves the gene symbol via MyGene.info, fetches the canonical transcript
     from Ensembl, and returns its CDS (start codon through stop codon, no UTRs).
 
     Args:
         gene_symbol: HGNC gene symbol, e.g. "BRCA1".
-        species: Species name as accepted by MyGene.info. Defaults to "human".
 
     Returns:
         The CDS nucleotide sequence as a string.
@@ -62,6 +61,6 @@ def get_canonical_cds(gene_symbol: str, species: str = "human") -> str:
         GeneNotFoundError: If the gene or its canonical transcript cannot be found.
         requests.HTTPError: On unexpected Ensembl API errors.
     """
-    ensembl_gene_id = _resolve_ensembl_gene_id(gene_symbol, species)
+    ensembl_gene_id = _resolve_ensembl_gene_id(gene_symbol)
     transcript_id = _lookup_canonical_transcript(ensembl_gene_id, gene_symbol)
     return _fetch_cds(transcript_id)
