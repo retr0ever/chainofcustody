@@ -12,11 +12,16 @@ def runner():
 @pytest.fixture
 def mock_optimize_run(mocker):
     import numpy as np
-    from chainofcustody.optimization.problem import N_OBJECTIVES
+    from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES
     mock = mocker.patch("chainofcustody.cli.run")
+    mock_history = [
+        {"generation": g, "sequence": "ACGU", **{m: 0.8 for m in METRIC_NAMES}, "overall": 0.8}
+        for g in range(1, 4)
+    ]
     mock.return_value = (
         np.array([[0, 1, 2, 3]] * 3),
         np.array([[0.3] * N_OBJECTIVES] * 3),
+        mock_history,
     )
     return mock
 
@@ -86,13 +91,14 @@ def test_workers_is_passed(runner, mock_optimize_run, mock_scoring):
 
 
 def test_csv_output(runner, mock_optimize_run, mock_scoring, tmp_path):
-    csv_file = tmp_path / "results.csv"
+    csv_file = tmp_path / "history.csv"
     result = runner.invoke(main, ["--seq-len", "4", "--csv", str(csv_file)])
 
     assert result.exit_code == 0
     assert csv_file.exists()
+    assert "History written to" in result.output
 
     import csv as csv_mod
     rows = list(csv_mod.DictReader(csv_file.open()))
     assert len(rows) == 3
-    assert set(rows[0].keys()) >= {"rank", "label", "sequence", "overall"}
+    assert set(rows[0].keys()) >= {"generation", "sequence", "overall"}

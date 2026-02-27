@@ -217,6 +217,13 @@ def _styled_status(status: str) -> Text:
     return Text(status, style=f"bold {colour}")
 
 
+def _styled_metric(metric: str, report: dict, status: str) -> Text:
+    """Show the actual numeric value for a metric, coloured by its status."""
+    value = _metric_value(metric, report)
+    colour = STATUS_COLOURS.get(status, "dim")
+    return Text(value or status, style=f"bold {colour}")
+
+
 def _cai_bar(value: float, width: int = 10) -> Text:
     filled = round(value * width)
     bar = Text()
@@ -458,11 +465,11 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
             str(i),
             r["label"],
             str(report["codon_scores"]["cai"]),
-            _styled_status(summary["gc_content"]),
-            _metric_value("mir122_detargeting", report),
-            _styled_status(summary["utr5_accessibility"]),
-            _styled_status(summary["manufacturability"]),
-            _styled_status(summary.get("stability", "GREY")),
+            _styled_metric("gc_content", report, summary["gc_content"]),
+            _styled_metric("mir122_detargeting", report, summary["mir122_detargeting"]),
+            _styled_metric("utr5_accessibility", report, summary["utr5_accessibility"]),
+            _styled_metric("manufacturability", report, summary["manufacturability"]),
+            _styled_metric("stability", report, summary.get("stability", "GREY")),
             Text(f"{score:.2f}", style=score_style),
         )
 

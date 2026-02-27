@@ -8,8 +8,9 @@ from pymoo.optimize import minimize
 from pymoo.parallelization.starmap import StarmapParallelization
 from pymoo.util.ref_dirs import get_reference_directions
 
+from chainofcustody.evaluation.fitness import DEFAULT_WEIGHTS
 from chainofcustody.optimization.operators import NucleotideMutation, NucleotideSampling
-from chainofcustody.optimization.problem import N_OBJECTIVES, SequenceProblem
+from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem
 
 _DEFAULT_WORKERS = os.cpu_count() or 1
 
@@ -36,6 +37,23 @@ def build_algorithm(
     )
 
 
+def _build_history(result) -> list[dict]:
+    """Extract per-generation population snapshots from a pymoo result."""
+    records = []
+    for gen_state in result.history:
+        gen = gen_state.n_gen
+        X = gen_state.pop.get("X")
+        F = gen_state.pop.get("F")
+        if X is None or F is None:
+            continue
+        for x_row, f_row in zip(X, F):
+            seq = "".join(NUCLEOTIDES[x_row])
+            scores = {m: round(1.0 - float(f_val), 4) for m, f_val in zip(METRIC_NAMES, f_row)}
+            overall = round(sum(scores[m] * DEFAULT_WEIGHTS.get(m, 0) for m in METRIC_NAMES), 4)
+            records.append({"generation": gen, "sequence": seq, **scores, "overall": overall})
+    return records
+
+
 def run(
     seq_len: int = 100,
     pop_size: int = 128,
@@ -44,7 +62,7 @@ def run(
     seed: int | None = None,
     verbose: bool = False,
     n_workers: int | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
     Args:
@@ -59,32 +77,29 @@ def run(
             single-threaded (no pool overhead).
 
     Returns:
-        A tuple ``(X, F)`` where ``X`` is the integer-encoded Pareto-front
-        population and ``F`` are the corresponding objective values.
+        A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
+        Pareto-front population, ``F`` are the corresponding objective values,
+        and ``history`` is a list of per-generation population records suitable
+        for CSV export.
     """
     workers = n_workers if n_workers is not None else _DEFAULT_WORKERS
 
     algorithm = build_algorithm(pop_size=pop_size, mutation_rate=mutation_rate)
 
+    minimize_kwargs = dict(
+        termination=("n_gen", n_gen),
+        seed=seed,
+        verbose=verbose,
+        save_history=True,
+    )
+
     if workers == 1:
         problem = SequenceProblem(seq_len=seq_len)
-        result = minimize(
-            problem,
-            algorithm,
-            termination=("n_gen", n_gen),
-            seed=seed,
-            verbose=verbose,
-        )
+        result = minimize(problem, algorithm, **minimize_kwargs)
     else:
         with Pool(workers) as pool:
             runner = StarmapParallelization(pool.starmap)
             problem = SequenceProblem(seq_len=seq_len, elementwise_runner=runner)
-            result = minimize(
-                problem,
-                algorithm,
-                termination=("n_gen", n_gen),
-                seed=seed,
-                verbose=verbose,
-            )
+            result = minimize(problem, algorithm, **minimize_kwargs)
 
-    return result.X, result.F
+    return result.X, result.F, _build_history(result)

@@ -80,8 +80,10 @@ def test_mutation_invalid_rate():
 # ── End-to-end ────────────────────────────────────────────────────────────────
 
 def test_run_returns_pareto_front():
-    X, F = run(seq_len=20, pop_size=20, n_gen=3, seed=42)
+    X, F, history = run(seq_len=20, pop_size=128, n_gen=3, seed=42)
     assert X.ndim == 2
     assert X.shape[1] == 20
     assert F.shape[1] == N_METRICS
     assert X.min() >= 0 and X.max() <= 3
+    assert len(history) > 0
+    assert {"generation", "sequence", "overall"} <= history[0].keys()

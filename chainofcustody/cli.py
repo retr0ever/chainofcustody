@@ -12,22 +12,14 @@ from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
 
 console = Console()
 
-_CSV_COLUMNS = ["rank", "label", "sequence", *METRIC_NAMES, "overall"]
+_CSV_COLUMNS = ["generation", "sequence", *METRIC_NAMES, "overall"]
 
 
-def _write_csv(path: Path, results: list[dict]) -> None:
+def _write_csv(path: Path, history: list[dict]) -> None:
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=_CSV_COLUMNS)
         writer.writeheader()
-        for rank, r in enumerate(results, start=1):
-            scores = r["fitness"]["scores"]
-            writer.writerow({
-                "rank": rank,
-                "label": r["label"],
-                "sequence": r["sequence"],
-                **{m: round(scores[m]["value"], 4) for m in METRIC_NAMES},
-                "overall": r["fitness"]["overall"],
-            })
+        writer.writerows(history)
 
 
 @click.command()
@@ -49,7 +41,7 @@ def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: in
         f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]\n"
     )
 
-    X, F = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed, n_workers=workers)
+    X, F, history = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed, n_workers=workers)
 
     problem = SequenceProblem(seq_len=seq_len)
     sequences = problem.decode(X)
@@ -70,8 +62,8 @@ def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: in
     results.sort(key=lambda r: r["fitness"]["overall"], reverse=True)
 
     if csv_path:
-        _write_csv(csv_path, results)
-        console.print(f"Results written to [bold]{csv_path}[/bold]\n")
+        _write_csv(csv_path, history)
+        console.print(f"History written to [bold]{csv_path}[/bold] ({len(history)} rows)\n")
 
     if output_fmt == "json":
         out = []
