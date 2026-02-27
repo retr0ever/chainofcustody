@@ -13,6 +13,7 @@ from .codons import score_codons
 from .mirna import score_mirna
 from .structure import score_structure
 from .manufacturing import score_manufacturing
+from .stability import score_stability
 from .fitness import compute_fitness
 
 
@@ -67,6 +68,9 @@ def score_sequence(
     # Metric 5: Manufacturability
     manufacturing_scores = score_manufacturing(parsed)
 
+    # Metric 6: Stability
+    stability_scores = score_stability(parsed)
+
     # Traffic light summary
     cai = codon_scores.get("cai", 0)
     gc = codon_scores.get("gc_content", {}).get("cds", 0)
@@ -80,6 +84,7 @@ def score_sequence(
         "mir122_detargeting": _traffic_light(mir122_count, (3, 100), (1, 100)),
         "utr5_accessibility": structure_scores.get("utr5_accessibility", {}).get("status", "GREY"),
         "manufacturability": _traffic_light(-mfg_violations, (-3, 0), (-999, 0)),
+        "stability": stability_scores.get("status", "GREY"),
     }
 
     return {
@@ -94,6 +99,7 @@ def score_sequence(
         "mirna_scores": mirna_scores,
         "structure_scores": structure_scores,
         "manufacturing_scores": manufacturing_scores,
+        "stability_scores": stability_scores,
         "summary": summary,
     }
 
@@ -107,6 +113,7 @@ def format_report(report: dict) -> str:
     mirna = report["mirna_scores"]
     structure = report["structure_scores"]
     mfg = report["manufacturing_scores"]
+    stab = report.get("stability_scores", {})
 
     lines.append("# mRNA Sequence Scoring Report")
     lines.append("")
@@ -179,6 +186,15 @@ def format_report(report: dict) -> str:
     rs = mfg["restriction_sites"]
     rs_label = "PASS" if rs["pass"] else f"FAIL ({len(rs['violations'])} sites found)"
     lines.append(f"- **Restriction sites:** {rs_label}")
+    lines.append("")
+
+    # Stability details
+    if stab:
+        lines.append("## 5. Stability")
+        lines.append(f"- **GC3 (wobble position):** {stab.get('gc3', 0):.1%}")
+        lines.append(f"- **MFE per nt:** {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
+        lines.append(f"- **AU-rich elements:** {stab.get('au_rich_elements', 0)} in 3'UTR")
+        lines.append(f"- **Stability score:** {stab.get('stability_score', 0):.2f}")
 
     return "\n".join(lines)
 
@@ -216,6 +232,7 @@ def _metric_label(metric: str) -> str:
         "mir122_detargeting": "miR-122 detargeting",
         "utr5_accessibility": "5'UTR accessibility",
         "manufacturability": "Manufacturability",
+        "stability": "Stability",
     }
     return labels.get(metric, metric)
 
@@ -234,6 +251,9 @@ def _metric_value(metric: str, report: dict) -> str:
     if metric == "manufacturability":
         v = report["manufacturing_scores"]["total_violations"]
         return f"{v} issue{'s' if v != 1 else ''}"
+    if metric == "stability":
+        s = report.get("stability_scores", {}).get("stability_score", 0)
+        return f"{s:.2f}"
     return ""
 
 
@@ -244,6 +264,7 @@ def _metric_hint(metric: str) -> str:
         "mir122_detargeting": "need 3+ in 3'UTR",
         "utr5_accessibility": "> -20 for green",
         "manufacturability": "0 = green",
+        "stability": ">0.7 for green",
     }
     return hints.get(metric, "")
 
@@ -378,6 +399,21 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
             console.print("  Restriction sites  pass", style="green")
         console.print()
 
+    # Stability detail
+    stab = report.get("stability_scores", {})
+    if summary.get("stability") != "GREEN" and stab:
+        has_details = True
+        console.print(Rule("Stability", style="dim"))
+        console.print(f"  GC3 (wobble position)  {stab.get('gc3', 0):.1%}", style="bold")
+        console.print(f"  MFE per nt  {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
+        are = stab.get("au_rich_elements", 0)
+        if are > 0:
+            console.print(f"  AU-rich elements  {are} in 3'UTR", style="yellow")
+        else:
+            console.print("  AU-rich elements  none", style="green")
+        console.print(f"  Combined score  {stab.get('stability_score', 0):.2f}", style="dim")
+        console.print()
+
     # ── Suggestions
     if fitness["suggestions"]:
         console.print(Rule("What to improve", style="dim"))
@@ -407,6 +443,7 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
     table.add_column("miR-122", justify="center")
     table.add_column("5'UTR", justify="center")
     table.add_column("Mfg", justify="center")
+    table.add_column("Stab", justify="center")
     table.add_column("Score", justify="right", style="bold")
 
     for i, r in enumerate(results, 1):
@@ -425,6 +462,7 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
             _metric_value("mir122_detargeting", report),
             _styled_status(summary["utr5_accessibility"]),
             _styled_status(summary["manufacturability"]),
+            _styled_status(summary.get("stability", "GREY")),
             Text(f"{score:.2f}", style=score_style),
         )
 

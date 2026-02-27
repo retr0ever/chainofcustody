@@ -116,13 +116,15 @@ def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed
     """Run NSGA3 to evolve an optimal nucleotide sequence population."""
     import json
     import numpy as np
-    from chainofcustody.optimization import run, SequenceProblem
+    from chainofcustody.optimization import run, METRIC_NAMES, SequenceProblem
+    from chainofcustody.evaluation.report import score_sequence, print_report, print_batch_report
+    from chainofcustody.evaluation.fitness import compute_fitness
 
     console.print(
-        f"Running NSGA3 — seq_len=[bold]{seq_len}[/bold]  "
+        f"\nRunning NSGA3 — seq_len=[bold]{seq_len}[/bold]  "
         f"pop_size=[bold]{pop_size}[/bold]  "
         f"n_gen=[bold]{n_gen}[/bold]  "
-        f"mutation_rate=[bold]{mutation_rate}[/bold]"
+        f"mutation_rate=[bold]{mutation_rate}[/bold]\n"
     )
 
     X, F = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed)
@@ -130,16 +132,37 @@ def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed
     problem = SequenceProblem(seq_len=seq_len)
     sequences = problem.decode(X)
 
+    # Score each Pareto-front sequence with the full evaluation pipeline
+    results = []
+    for i, seq in enumerate(sequences):
+        try:
+            dna_seq = seq.replace("U", "T")
+            report = score_sequence(dna_seq)
+            fitness = compute_fitness(report)
+            results.append({"label": f"pareto_{i + 1}", "report": report, "fitness": fitness})
+        except Exception:
+            continue
+
+    if not results:
+        console.print("[bold red]Error:[/bold red] No sequences could be scored.")
+        raise SystemExit(1)
+
+    results.sort(key=lambda r: r["fitness"]["overall"], reverse=True)
+
     if output_fmt == "json":
-        out = [
-            {"sequence": seq, "objectives": f.tolist()}
-            for seq, f in zip(sequences, F)
-        ]
-        console.print_json(json.dumps(out, indent=2))
+        out = []
+        for r in results:
+            data = dict(r["report"])
+            data["fitness"] = r["fitness"]
+            data["label"] = r["label"]
+            out.append(data)
+        console.print_json(json.dumps(out, indent=2, default=str))
     else:
-        console.print(f"\nPareto front: [bold]{len(sequences)}[/bold] sequences\n")
-        for seq, f in zip(sequences, F):
-            console.print(f"  [dim]{seq[:40]}…[/dim]  objectives={np.round(f, 3).tolist()}")
+        console.print(f"Pareto front: [bold]{len(results)}[/bold] scored sequences\n")
+        if len(results) == 1:
+            print_report(console, results[0]["report"], label=results[0]["label"])
+        else:
+            print_batch_report(console, results)
 
 
 def _resolve_inputs(inputs: tuple[str, ...], gene: str | None) -> list[tuple[str, str]]:

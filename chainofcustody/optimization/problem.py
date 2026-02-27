@@ -1,20 +1,31 @@
 import numpy as np
 from pymoo.core.problem import Problem
 
+from chainofcustody.evaluation.report import score_sequence
+from chainofcustody.evaluation.fitness import compute_fitness
+
 # Nucleotide encoding: 0=A, 1=C, 2=G, 3=U
 NUCLEOTIDES = np.array(["A", "C", "G", "U"])
 N_NUCLEOTIDES = len(NUCLEOTIDES)
-N_OBJECTIVES = 3
+
+# One objective per fitness metric + overall
+METRIC_NAMES = [
+    "codon_quality",
+    "gc_content",
+    "mir122_detargeting",
+    "utr5_accessibility",
+    "manufacturability",
+    "stability",
+]
+N_OBJECTIVES = len(METRIC_NAMES)
 
 
 class SequenceProblem(Problem):
     """Multi-objective sequence optimisation problem.
 
     Variables are nucleotide positions encoded as integers 0–3 (A/C/G/U).
-    Objectives (all minimised by NSGA3):
-      F[0] — fraction of A (encoding 0)
-      F[1] — fraction of C (encoding 1)
-      F[2] — fraction of U (encoding 3)
+    Objectives: minimise (1 - metric_score) for each of the 6 evaluation metrics.
+    Lower = better (pymoo minimises).
     """
 
     def __init__(self, seq_len: int = 100) -> None:
@@ -28,10 +39,22 @@ class SequenceProblem(Problem):
 
     def _evaluate(self, X: np.ndarray, out: dict, *args, **kwargs) -> None:
         sequences = self.decode(X)
-        frac_a = np.array([s.count("A") / len(s) for s in sequences])
-        frac_c = np.array([s.count("C") / len(s) for s in sequences])
-        frac_u = np.array([s.count("U") / len(s) for s in sequences])
-        out["F"] = np.column_stack([frac_a, frac_c, frac_u])
+        objectives = []
+
+        for seq in sequences:
+            try:
+                # Convert U back to T for our DNA-based scoring pipeline
+                dna_seq = seq.replace("U", "T")
+                report = score_sequence(dna_seq)
+                fitness = compute_fitness(report)
+                # Minimise (1 - score) for each metric
+                row = [1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES]
+            except Exception:
+                # Sequence couldn't be scored — worst possible fitness
+                row = [1.0] * N_OBJECTIVES
+            objectives.append(row)
+
+        out["F"] = np.array(objectives)
 
     def decode(self, X: np.ndarray) -> list[str]:
         """Convert integer-encoded population rows to nucleotide strings."""

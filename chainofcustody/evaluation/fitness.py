@@ -1,11 +1,12 @@
 """Normalised fitness scoring and suggestion engine for candidate ranking."""
 
 DEFAULT_WEIGHTS = {
-    "codon_quality": 0.20,
+    "codon_quality": 0.15,
     "gc_content": 0.10,
-    "mir122_detargeting": 0.30,
-    "utr5_accessibility": 0.15,
-    "manufacturability": 0.25,
+    "mir122_detargeting": 0.25,
+    "utr5_accessibility": 0.10,
+    "manufacturability": 0.15,
+    "stability": 0.25,
 }
 
 
@@ -49,12 +50,18 @@ def _normalise_manufacturing(report: dict) -> float:
     return max(0.0, 1 - violations / 10)
 
 
+def _normalise_stability(report: dict) -> float:
+    """Use the combined stability score directly (already 0-1)."""
+    return report.get("stability_scores", {}).get("stability_score", 0.5)
+
+
 NORMALISERS = {
     "codon_quality": _normalise_cai,
     "gc_content": _normalise_gc,
     "mir122_detargeting": _normalise_mir122,
     "utr5_accessibility": _normalise_utr5,
     "manufacturability": _normalise_manufacturing,
+    "stability": _normalise_stability,
 }
 
 
@@ -95,7 +102,7 @@ def compute_fitness(report: dict, weights: dict[str, float] | None = None) -> di
 
 
 def _priority_from_weight(weight: float) -> str:
-    if weight >= 0.25:
+    if weight >= 0.20:
         return "high"
     elif weight >= 0.15:
         return "medium"
@@ -156,5 +163,16 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
             unique = list(dict.fromkeys(enzymes))
             parts.append(f"{rs_v} restriction sites ({', '.join(unique)})")
         return "Fix " + " + ".join(parts) if parts else None
+
+    if metric == "stability":
+        stab = report.get("stability_scores", {})
+        parts = []
+        if stab.get("gc3", 0) < 0.5:
+            parts.append(f"increase GC3 wobble content (current: {stab['gc3']:.1%})")
+        if stab.get("au_rich_elements", 0) > 0:
+            parts.append(f"remove {stab['au_rich_elements']} AU-rich elements from 3'UTR")
+        if stab.get("mfe_per_nt", 0) > -0.3:
+            parts.append("increase thermodynamic stability")
+        return "Improve stability: " + ", ".join(parts) if parts else "Improve overall mRNA stability"
 
     return None

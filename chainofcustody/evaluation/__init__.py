@@ -2,6 +2,7 @@
 
 from .report import score_sequence, report_to_json
 from .fitness import compute_fitness
+from .evolve import evolve
 
 
 def evaluate_candidate(
@@ -47,4 +48,4 @@ def evaluate_batch(
     return results
 
 
-__all__ = ["score_sequence", "compute_fitness", "evaluate_candidate", "evaluate_batch", "report_to_json"]
+__all__ = ["score_sequence", "compute_fitness", "evaluate_candidate", "evaluate_batch", "report_to_json", "evolve"]
