@@ -29,13 +29,13 @@ def test_problem_evaluate_shape():
 
 def test_problem_evaluate_fractions():
     problem = SequenceProblem(seq_len=4)
-    # All-A sequence: frac_a=1, frac_c=0, frac_t=0
+    # All-A sequence: frac_a=1, frac_c=0, frac_u=0
     X = np.array([[0, 0, 0, 0]])
     out = {}
     problem._evaluate(X, out)
     np.testing.assert_array_almost_equal(out["F"], [[1.0, 0.0, 0.0]])
 
-    # One of each A, C, G, T: each fraction = 0.25
+    # One of each A, C, G, U: each fraction = 0.25
     X = np.array([[0, 1, 2, 3]])
     problem._evaluate(X, out)
     np.testing.assert_array_almost_equal(out["F"], [[0.25, 0.25, 0.25]])
@@ -43,8 +43,8 @@ def test_problem_evaluate_fractions():
 
 def test_problem_decode():
     problem = SequenceProblem(seq_len=4)
-    X = np.array([[0, 1, 2, 3]])  # A C G T
-    assert problem.decode(X) == ["ACGT"]
+    X = np.array([[0, 1, 2, 3]])  # A C G U
+    assert problem.decode(X) == ["ACGU"]
 
 
 # ── Sampling ─────────────────────────────────────────────────────────────────
