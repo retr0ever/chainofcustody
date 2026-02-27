@@ -253,7 +253,7 @@ def _metric_hint(metric: str, report: dict) -> str:
         sites = report["mirna_scores"]["detargeting"].get("miR-122-5p", {}).get("utr3_sites", 0)
         return f"{sites} site{'s' if sites != 1 else ''} in 3'UTR"
     if metric == "utr5_accessibility":
-        return "> -20 for green"
+        return "< -30 for green"
     if metric == "manufacturability":
         v = report["manufacturing_scores"]["total_violations"]
         return f"{v} violation{'s' if v != 1 else ''}"

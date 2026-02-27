@@ -24,15 +24,15 @@ def check_utr5_accessibility(parsed: ParsedSequence) -> dict:
     landing_zone = utr5 + parsed.cds[:30]
     structure, mfe = fold_sequence(landing_zone)
 
-    if mfe > -20:
+    if mfe < -30:
         status = "GREEN"
-        message = "5'UTR is accessible — low secondary structure"
-    elif mfe > -30:
+        message = "5'UTR is well-structured — strong thermodynamic stability"
+    elif mfe < -20:
         status = "AMBER"
-        message = "5'UTR has moderate structure — may partially impede ribosome loading"
+        message = "5'UTR has moderate structure"
     else:
         status = "RED"
-        message = "5'UTR is highly structured — likely blocks ribosome scanning"
+        message = "5'UTR lacks structure — low thermodynamic stability"
 
     return {
         "mfe": round(mfe, 2),

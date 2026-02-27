@@ -33,15 +33,15 @@ def _normalise_mir122(report: dict) -> float:
 
 
 def _normalise_utr5(report: dict) -> float:
-    """1.0 if MFE > -20, linear to 0 at -50."""
+    """1.0 if MFE < -30, linear to 0 at 0."""
     mfe = report["structure_scores"].get("utr5_accessibility", {}).get("mfe")
     if mfe is None:
         return 0.5  # no data — neutral
-    if mfe > -20:
+    if mfe < -30:
         return 1.0
-    elif mfe < -50:
+    elif mfe > 0:
         return 0.0
-    return (mfe + 50) / 30
+    return -mfe / 30
 
 
 def _normalise_manufacturing(report: dict) -> float:
