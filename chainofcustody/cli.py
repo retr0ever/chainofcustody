@@ -105,6 +105,43 @@ def evaluate(inputs: tuple[str, ...], gene: str | None, offtarget: str, target: 
             print_batch_report(console, results)
 
 
+@main.command()
+@click.option("--seq-len", type=int, default=100, show_default=True, help="Length of each candidate sequence.")
+@click.option("--pop-size", type=int, default=100, show_default=True, help="Population size.")
+@click.option("--n-gen", type=int, default=50, show_default=True, help="Number of generations.")
+@click.option("--mutation-rate", type=float, default=0.01, show_default=True, help="Per-position mutation probability.")
+@click.option("--seed", type=int, default=None, help="Random seed for reproducibility.")
+@click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
+def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, output_fmt: str) -> None:
+    """Run NSGA3 to evolve an optimal nucleotide sequence population."""
+    import json
+    import numpy as np
+    from chainofcustody.optimization import run, SequenceProblem
+
+    console.print(
+        f"Running NSGA3 — seq_len=[bold]{seq_len}[/bold]  "
+        f"pop_size=[bold]{pop_size}[/bold]  "
+        f"n_gen=[bold]{n_gen}[/bold]  "
+        f"mutation_rate=[bold]{mutation_rate}[/bold]"
+    )
+
+    X, F = run(seq_len=seq_len, pop_size=pop_size, n_gen=n_gen, mutation_rate=mutation_rate, seed=seed)
+
+    problem = SequenceProblem(seq_len=seq_len)
+    sequences = problem.decode(X)
+
+    if output_fmt == "json":
+        out = [
+            {"sequence": seq, "objectives": f.tolist()}
+            for seq, f in zip(sequences, F)
+        ]
+        console.print_json(json.dumps(out, indent=2))
+    else:
+        console.print(f"\nPareto front: [bold]{len(sequences)}[/bold] sequences\n")
+        for seq, f in zip(sequences, F):
+            console.print(f"  [dim]{seq[:40]}…[/dim]  objectives={np.round(f, 3).tolist()}")
+
+
 def _resolve_inputs(inputs: tuple[str, ...], gene: str | None) -> list[tuple[str, str]]:
     """Resolve CLI inputs into a list of (label, sequence) pairs."""
     sequences = []

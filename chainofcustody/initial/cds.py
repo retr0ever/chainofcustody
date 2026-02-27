@@ -39,7 +39,8 @@ def _lookup_canonical_transcript(ensembl_gene_id: str, gene_symbol: str) -> str:
 
 
 def _fetch_cds(transcript_id: str) -> str:
-    url = f"{_ENSEMBL_API}/sequence/id/{transcript_id}"
+    stable_id = transcript_id.split(".")[0]
+    url = f"{_ENSEMBL_API}/sequence/id/{stable_id}"
     response = requests.get(url, headers=_HEADERS, params={"type": "cds"})
     response.raise_for_status()
     return response.json()["seq"]
