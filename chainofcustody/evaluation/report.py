@@ -13,6 +13,7 @@ from .codons import score_codons
 from .mirna import score_mirna
 from .structure import score_structure
 from .manufacturing import score_manufacturing
+from .fitness import DEFAULT_WEIGHTS
 from .stability import score_stability
 from .fitness import compute_fitness
 
@@ -474,4 +475,29 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
         )
 
     console.print(table)
+    _print_score_legend(console)
+
+
+def _print_score_legend(console: Console) -> None:
+    """Print a compact legend explaining each scored metric."""
+    legend = Table(show_header=True, header_style="bold dim", padding=(0, 1), box=None, show_edge=False)
+    legend.add_column("Metric", style="dim")
+    legend.add_column("Weight", justify="right", style="dim")
+    legend.add_column("Target / Interpretation", style="dim")
+
+    rows = [
+        ("CAI",     "codon_quality",      "0→1; >0.8 ideal (human codon usage)"),
+        ("GC",      "gc_content",         "CDS GC%; 40–60% optimal for stability & synthesis"),
+        ("miR-122", "mir122_detargeting",  "# CACTCC seed sites in 3'UTR; ≥3 for liver detargeting"),
+        ("5'UTR",   "utr5_accessibility",  "MFE kcal/mol; > −20 means accessible cap for translation"),
+        ("Mfg",     "manufacturability",   "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
+        ("Stab",    "stability",           "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("Score",   None,                  "weighted sum of all metrics above"),
+    ]
+
+    for label, key, description in rows:
+        weight = f"{DEFAULT_WEIGHTS[key]:.0%}" if key else "—"
+        legend.add_row(label, weight, description)
+
+    console.print(legend)
     console.print()
