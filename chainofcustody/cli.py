@@ -1,18 +1,149 @@
+import sys
+from pathlib import Path
+
 import rich_click as click
 from rich.console import Console
-
-from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
 
 console = Console()
 
 
-@click.command()
+@click.group()
+def main() -> None:
+    """Chain of Custody — mRNA sequence design and evaluation."""
+
+
+@main.command()
 @click.argument("gene_symbol")
-def main(gene_symbol: str) -> None:
+def fetch(gene_symbol: str) -> None:
     """Fetch the canonical CDS for a given GENE_SYMBOL."""
+    from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
+
     try:
         cds = get_canonical_cds(gene_symbol)
         console.print(cds)
     except GeneNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise SystemExit(1)
+
+
+@main.command()
+@click.argument("inputs", nargs=-1)
+@click.option("--gene", default=None, help="Gene symbol — fetches the CDS and scores it directly.")
+@click.option("--offtarget", default="HepG2", help="Off-target cell type (default: HepG2 / liver).")
+@click.option("--target", default=None, help="Target cell type column name from the dataset.")
+@click.option("--utr5-end", type=int, default=None, help="Manual 5'UTR end position (0-indexed).")
+@click.option("--cds-end", type=int, default=None, help="Manual CDS end position (0-indexed, exclusive).")
+@click.option("--output", "output_fmt", type=click.Choice(["markdown", "json", "rich"]), default="rich", help="Output format (default: rich).")
+def evaluate(inputs: tuple[str, ...], gene: str | None, offtarget: str, target: str | None, utr5_end: int | None, cds_end: int | None, output_fmt: str) -> None:
+    """Score mRNA sequences across 5 metrics.
+
+    \b
+    Accepts input in several ways:
+      chainofcustody evaluate sequence.fasta                     (one file)
+      chainofcustody evaluate a.fasta b.fasta c.fasta           (multiple files)
+      chainofcustody evaluate candidates/                        (directory of FASTA files)
+      chainofcustody evaluate --gene POU5F1                     (fetch + score)
+      chainofcustody fetch POU5F1 | chainofcustody evaluate     (pipe)
+    """
+    from chainofcustody.evaluation.report import (
+        score_sequence, format_report, report_to_json, print_report, print_batch_report,
+    )
+    from chainofcustody.evaluation.fitness import compute_fitness
+
+    sequences = _resolve_inputs(inputs, gene)
+
+    if not sequences:
+        console.print("[bold red]Error:[/bold red] No input. Provide a sequence, file path, directory, or --gene flag.")
+        console.print()
+        console.print("  chainofcustody evaluate sequence.fasta")
+        console.print("  chainofcustody evaluate candidates/")
+        console.print("  chainofcustody evaluate --gene POU5F1")
+        raise SystemExit(1)
+
+    # Score all sequences
+    results = []
+    for label, seq in sequences:
+        try:
+            report = score_sequence(seq=seq, offtarget=offtarget, target=target, utr5_end=utr5_end, cds_end=cds_end)
+            fitness = compute_fitness(report)
+            results.append({"label": label, "report": report, "fitness": fitness})
+        except Exception as e:
+            console.print(f"[bold red]Error scoring {label}:[/bold red] {e}")
+
+    if not results:
+        raise SystemExit(1)
+
+    # Sort by fitness
+    results.sort(key=lambda r: r["fitness"]["overall"], reverse=True)
+
+    # Output
+    if len(results) == 1:
+        r = results[0]
+        if output_fmt == "json":
+            data = dict(r["report"])
+            data["fitness"] = r["fitness"]
+            console.print_json(report_to_json(r["report"]))
+        elif output_fmt == "markdown":
+            console.print(format_report(r["report"]))
+        else:
+            print_report(console, r["report"], label=r["label"])
+    else:
+        if output_fmt == "json":
+            import json
+            out = []
+            for r in results:
+                data = dict(r["report"])
+                data["fitness"] = r["fitness"]
+                data["label"] = r["label"]
+                out.append(data)
+            console.print_json(json.dumps(out, indent=2, default=str))
+        elif output_fmt == "markdown":
+            for r in results:
+                console.print(f"\n## {r['label']}\n")
+                console.print(format_report(r["report"]))
+        else:
+            print_batch_report(console, results)
+
+
+def _resolve_inputs(inputs: tuple[str, ...], gene: str | None) -> list[tuple[str, str]]:
+    """Resolve CLI inputs into a list of (label, sequence) pairs."""
+    sequences = []
+
+    if gene:
+        if inputs:
+            console.print("[bold red]Error:[/bold red] Provide either files or --gene, not both.")
+            raise SystemExit(1)
+        from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
+        console.print(f"Fetching CDS for [bold]{gene}[/bold]...")
+        try:
+            seq = get_canonical_cds(gene)
+            return [(gene, seq)]
+        except GeneNotFoundError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            raise SystemExit(1)
+        except Exception as e:
+            console.print(f"[bold red]Error fetching gene:[/bold red] {e}")
+            raise SystemExit(1)
+
+    if inputs:
+        for inp in inputs:
+            p = Path(inp)
+            if p.is_dir():
+                # Collect all FASTA-like files in directory
+                for f in sorted(p.iterdir()):
+                    if f.suffix.lower() in (".fasta", ".fa", ".fna", ".txt", ".seq"):
+                        sequences.append((f.stem, str(f)))
+            elif p.is_file():
+                sequences.append((p.stem, str(p)))
+            else:
+                # Treat as raw sequence
+                sequences.append(("input", inp))
+        return sequences
+
+    # No arguments — try stdin
+    if not sys.stdin.isatty():
+        data = sys.stdin.read().strip()
+        if data:
+            return [("stdin", data)]
+
+    return []
