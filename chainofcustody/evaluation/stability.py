@@ -7,8 +7,8 @@ import RNA
 from .parser import ParsedSequence
 
 
-# AU-rich element motif (DNA equivalent of AUUUA pentamer)
-ARE_PATTERN = re.compile(r"ATTTA")
+# AU-rich element motif (AUUUA pentamer)
+ARE_PATTERN = re.compile(r"AUUUA")
 
 
 def compute_gc3(parsed: ParsedSequence) -> float:
@@ -28,7 +28,7 @@ def compute_mfe_per_nt(parsed: ParsedSequence, max_length: int = 2000) -> float:
     Minimum free energy per nucleotide. More negative = more stable.
     For long sequences, uses windowed folding.
     """
-    seq = parsed.raw.replace("T", "U")
+    seq = parsed.raw
 
     if len(seq) <= max_length:
         _, mfe = RNA.fold(seq)

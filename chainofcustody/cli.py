@@ -136,8 +136,7 @@ def optimize(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed
     results = []
     for i, seq in enumerate(sequences):
         try:
-            dna_seq = seq.replace("U", "T")
-            report = score_sequence(dna_seq)
+            report = score_sequence(seq)
             fitness = compute_fitness(report)
             results.append({"label": f"pareto_{i + 1}", "report": report, "fitness": fitness})
         except Exception:

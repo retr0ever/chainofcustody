@@ -18,9 +18,9 @@ for aa, codons_dict in HUMAN_CODON_TABLE.items():
     if aa == "*":
         continue
     for codon, freq in codons_dict.items():
-        codon_dna = codon.upper().replace("U", "T")
-        CODON_TO_AA[codon_dna] = aa
-        AA_TO_CODONS.setdefault(aa, []).append(codon_dna)
+        codon_rna = codon.upper()
+        CODON_TO_AA[codon_rna] = aa
+        AA_TO_CODONS.setdefault(aa, []).append(codon_rna)
 
 
 def _relative_adaptiveness(codon_table: dict) -> dict[str, float]:
@@ -33,8 +33,8 @@ def _relative_adaptiveness(codon_table: dict) -> dict[str, float]:
         if max_freq == 0:
             continue
         for codon, freq in codons_dict.items():
-            codon_dna = codon.upper().replace("U", "T")
-            w[codon_dna] = freq / max_freq if max_freq > 0 else 0
+            codon_rna = codon.upper()
+            w[codon_rna] = freq / max_freq if max_freq > 0 else 0
     return w
 
 

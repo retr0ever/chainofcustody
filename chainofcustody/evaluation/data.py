@@ -11,9 +11,9 @@ DATA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "MOESM3_ESM
 # All 64 codons
 CODONS = [
     f"{a}{b}{c}"
-    for a in "ATGC"
-    for b in "ATGC"
-    for c in "ATGC"
+    for a in "AUGC"
+    for b in "AUGC"
+    for c in "AUGC"
 ]
 
 # Liver cell line columns in the dataset
@@ -52,7 +52,7 @@ def compute_codon_weights(cell_type_columns: list[str], path: str | Path | None 
     2. For each usage, record the gene's TE in the specified cell type(s)
     3. Average across all usages
 
-    Returns: dict mapping codon (e.g. "ATG") -> average TE (float)
+    Returns: dict mapping codon (e.g. "AUG") -> average TE (float)
     """
     df = load_dataset(path)
 
@@ -78,9 +78,9 @@ def compute_codon_weights(cell_type_columns: list[str], path: str | Path | None 
 
         codons = _extract_codons_from_cds(tx_seq, int(utr5_size), int(cds_size))
         for codon in codons:
-            codon_upper = codon.upper()
-            if codon_upper in codon_te:
-                codon_te[codon_upper].append(te)
+            codon_rna = codon.upper().replace("T", "U")
+            if codon_rna in codon_te:
+                codon_te[codon_rna].append(te)
 
     # Average
     result = {}

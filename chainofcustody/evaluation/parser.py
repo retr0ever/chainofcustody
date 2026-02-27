@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-STOP_CODONS = {"TAA", "TAG", "TGA"}
+STOP_CODONS = {"UAA", "UAG", "UGA"}
 
 
 @dataclass
@@ -37,29 +37,29 @@ def load_fasta(path: str | Path) -> str:
 
 
 def clean_sequence(seq: str) -> str:
-    """Normalise a sequence: uppercase, strip whitespace, convert U→T."""
+    """Normalise a sequence: uppercase, strip whitespace, convert T→U (RNA)."""
     seq = re.sub(r"\s+", "", seq).upper()
-    seq = seq.replace("U", "T")
-    if not re.match(r"^[ATGC]+$", seq):
-        invalid = set(seq) - set("ATGC")
+    seq = seq.replace("T", "U")
+    if not re.match(r"^[AUGC]+$", seq):
+        invalid = set(seq) - set("AUGC")
         raise ValueError(f"Sequence contains invalid characters: {invalid}")
     return seq
 
 
 def find_cds(seq: str) -> tuple[int, int]:
-    """Find CDS boundaries: first ATG to first in-frame stop codon."""
-    atg_pos = seq.find("ATG")
-    if atg_pos == -1:
-        raise ValueError("No ATG start codon found in sequence")
+    """Find CDS boundaries: first AUG to first in-frame stop codon."""
+    aug_pos = seq.find("AUG")
+    if aug_pos == -1:
+        raise ValueError("No AUG start codon found in sequence")
 
-    # Walk in-frame from the ATG looking for a stop codon
-    for i in range(atg_pos, len(seq) - 2, 3):
+    # Walk in-frame from the AUG looking for a stop codon
+    for i in range(aug_pos, len(seq) - 2, 3):
         codon = seq[i:i+3]
         if codon in STOP_CODONS:
             # CDS includes the stop codon
-            return atg_pos, i + 3
+            return aug_pos, i + 3
 
-    raise ValueError("No in-frame stop codon found after ATG")
+    raise ValueError("No in-frame stop codon found after AUG")
 
 
 def parse_sequence(
@@ -80,7 +80,7 @@ def parse_sequence(
     is_path = (
         len(seq) < 300
         and "\n" not in seq
-        and not re.match(r"^[ATGCU\s]+$", seq, re.IGNORECASE)
+        and not re.match(r"^[AUGCU\s]+$", seq, re.IGNORECASE)
     )
     if is_path:
         try:
@@ -109,7 +109,7 @@ def parse_sequence(
     # Validate CDS
     if len(cds) % 3 != 0:
         raise ValueError(f"CDS length ({len(cds)}) is not divisible by 3")
-    if not cds.startswith("ATG"):
-        raise ValueError(f"CDS does not start with ATG: starts with {cds[:3]}")
+    if not cds.startswith("AUG"):
+        raise ValueError(f"CDS does not start with AUG: starts with {cds[:3]}")
 
     return ParsedSequence(raw=seq, utr5=utr5, cds=cds, utr3=utr3)

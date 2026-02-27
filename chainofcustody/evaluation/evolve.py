@@ -108,7 +108,7 @@ def evolve(
     Run evolutionary optimisation on mRNA sequences.
 
     Args:
-        population: Initial candidate sequences (raw DNA strings).
+        population: Initial candidate sequences (DNA or RNA strings).
         generations: Number of iterations.
         top_k: How many top candidates survive as parents.
         children_per_pair: Children produced per parent pair.

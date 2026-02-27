@@ -6,11 +6,11 @@ from .parser import ParsedSequence
 
 # Common restriction enzyme recognition sites to avoid
 RESTRICTION_SITES = {
-    "BsaI": "GGTCTC",
-    "BsmBI": "CGTCTC",
-    "EcoRI": "GAATTC",
-    "BamHI": "GGATCC",
-    "HindIII": "AAGCTT",
+    "BsaI": "GGUCUC",
+    "BsmBI": "CGUCUC",
+    "EcoRI": "GAAUUC",
+    "BamHI": "GGAUCC",
+    "HindIII": "AAGCUU",
     "NotI": "GCGGCCGC",
 }
 
@@ -57,7 +57,7 @@ def check_gc_windows(seq: str, window: int = 50, min_gc: float = 0.30, max_gc: f
 def check_homopolymers(seq: str, max_run: int = 8) -> dict:
     """Check for homopolymer runs (e.g. AAAAAAAAA) exceeding max_run length."""
     violations = []
-    for nt in "ATGC":
+    for nt in "AUGC":
         pattern = f"{nt}{{{max_run + 1},}}"
         for m in re.finditer(pattern, seq):
             violations.append({
@@ -89,7 +89,7 @@ def check_restriction_sites(seq: str, sites: dict[str, str] | None = None) -> di
                 "strand": "forward",
             })
         # Check reverse complement
-        comp = {"A": "T", "T": "A", "G": "C", "C": "G"}
+        comp = {"A": "U", "U": "A", "G": "C", "C": "G"}
         rc = "".join(comp[nt] for nt in reversed(recognition_seq))
         if rc != recognition_seq:  # skip palindromes (already found)
             for m in re.finditer(re.escape(rc), seq):

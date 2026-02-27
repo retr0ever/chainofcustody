@@ -6,9 +6,8 @@ from .parser import ParsedSequence
 
 
 def fold_sequence(seq: str) -> tuple[str, float]:
-    """Fold a DNA sequence (converts to RNA internally). Returns (structure, MFE)."""
-    rna_seq = seq.replace("T", "U")
-    structure, mfe = RNA.fold(rna_seq)
+    """Fold an RNA sequence. Returns (structure, MFE)."""
+    structure, mfe = RNA.fold(seq)
     return structure, mfe
 
 

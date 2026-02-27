@@ -43,9 +43,7 @@ class SequenceProblem(Problem):
 
         for seq in sequences:
             try:
-                # Convert U back to T for our DNA-based scoring pipeline
-                dna_seq = seq.replace("U", "T")
-                report = score_sequence(dna_seq)
+                report = score_sequence(seq)
                 fitness = compute_fitness(report)
                 # Minimise (1 - score) for each metric
                 row = [1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES]

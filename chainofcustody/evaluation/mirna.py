@@ -28,30 +28,24 @@ class MirnaSiteHit:
     seed_seq: str  # the matched seed sequence
 
 
-def _rna_to_dna(seq: str) -> str:
-    return seq.replace("U", "T")
-
-
 def _reverse_complement(seq: str) -> str:
-    """Reverse complement of a DNA sequence."""
-    comp = {"A": "T", "T": "A", "G": "C", "C": "G"}
+    """Reverse complement of an RNA sequence."""
+    comp = {"A": "U", "U": "A", "G": "C", "C": "G"}
     return "".join(comp[nt] for nt in reversed(seq))
 
 
 def _get_seed_target(mirna_rna: str) -> str:
     """
-    Get the DNA target sequence for the miRNA seed region (nt 2-8).
-    This is the reverse complement of the seed, in DNA.
+    Get the RNA target sequence for the miRNA seed region (nt 2-8).
+    This is the reverse complement of the seed, in RNA.
     """
     seed_rna = mirna_rna[1:8]  # positions 2-8 (0-indexed: 1-7)
-    seed_dna = _rna_to_dna(seed_rna)
-    return _reverse_complement(seed_dna)
+    return _reverse_complement(seed_rna)
 
 
 def _get_full_target(mirna_rna: str) -> str:
-    """Get the full reverse complement target sequence in DNA."""
-    mirna_dna = _rna_to_dna(mirna_rna)
-    return _reverse_complement(mirna_dna)
+    """Get the full reverse complement target sequence in RNA."""
+    return _reverse_complement(mirna_rna)
 
 
 def _classify_region(pos: int, parsed: ParsedSequence) -> str:
