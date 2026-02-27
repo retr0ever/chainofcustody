@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from chainofcustody.optimization import (
+    METRIC_NAMES,
     NucleotideMutation,
     NucleotideSampling,
     SequenceProblem,
@@ -9,13 +10,15 @@ from chainofcustody.optimization import (
     run,
 )
 
+N_METRICS = len(METRIC_NAMES)
+
 
 # ── Problem ──────────────────────────────────────────────────────────────────
 
 def test_problem_dimensions():
     problem = SequenceProblem(seq_len=50)
     assert problem.n_var == 50
-    assert problem.n_obj == 3
+    assert problem.n_obj == N_METRICS
 
 
 def test_problem_evaluate_shape():
@@ -23,22 +26,18 @@ def test_problem_evaluate_shape():
     X = np.random.randint(0, 4, size=(10, 20))
     out = {}
     problem._evaluate(X, out)
-    assert out["F"].shape == (10, 3)
+    assert out["F"].shape == (10, N_METRICS)
     assert np.all((out["F"] >= 0) & (out["F"] <= 1))
 
 
-def test_problem_evaluate_fractions():
-    problem = SequenceProblem(seq_len=4)
-    # All-A sequence: frac_a=1, frac_c=0, frac_u=0
-    X = np.array([[0, 0, 0, 0]])
+def test_problem_evaluate_returns_valid_scores():
+    problem = SequenceProblem(seq_len=90)
+    X = np.random.randint(0, 4, size=(3, 90))
     out = {}
     problem._evaluate(X, out)
-    np.testing.assert_array_almost_equal(out["F"], [[1.0, 0.0, 0.0]])
-
-    # One of each A, C, G, U: each fraction = 0.25
-    X = np.array([[0, 1, 2, 3]])
-    problem._evaluate(X, out)
-    np.testing.assert_array_almost_equal(out["F"], [[0.25, 0.25, 0.25]])
+    # All objectives should be between 0 and 1 (1 - metric_score)
+    assert np.all(out["F"] >= 0)
+    assert np.all(out["F"] <= 1)
 
 
 def test_problem_decode():
@@ -86,5 +85,5 @@ def test_run_returns_pareto_front():
     X, F = run(seq_len=20, pop_size=20, n_gen=3, seed=42)
     assert X.ndim == 2
     assert X.shape[1] == 20
-    assert F.shape[1] == 3
+    assert F.shape[1] == N_METRICS
     assert X.min() >= 0 and X.max() <= 3
