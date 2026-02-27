@@ -66,9 +66,28 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 ```bash
 uv run pytest              # unit tests only (default: skips integration)
 uv run pytest -m integration  # integration tests (requires network)
+uv run pytest -x -v         # stop on first failure, verbose
 ```
 
-Mock `score_sequence` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data. Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
+**Running tests:** All tests must pass before pushing. Run `uv run pytest` from the repo root.
+
+**Mocking rules:**
+- Mock `score_sequence` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
+- Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
+- The mock report dict must include all 6 top-level keys: `sequence_info`, `codon_scores`, `mirna_scores`, `structure_scores`, `manufacturing_scores`, `stability_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
+
+**Test structure:**
+- `tests/test_cli.py` — CLI integration tests (invoke via CliRunner, mock scoring pipeline)
+- `tests/optimization/test_optimization.py` — problem dimensions, operator shapes, end-to-end NSGA-III
+- `tests/initial/test_dummy.py` — Ensembl API mocks for `get_canonical_cds`
+- `tests/initial/test_integration.py` — live Ensembl fetch (marked `integration`, skipped by default)
+- `tests/*/test_dummy.py` — placeholder tests for modules under development
+
+**Writing new tests:**
+- Evaluation metric tests need ViennaRNA installed (structure.py, stability.py). Mock `RNA.fold` if testing without it.
+- Sequences in tests should use RNA (`AUG`, not `ATG`) unless testing the T->U conversion in `clean_sequence` itself.
+- The optimizer uses `N_OBJECTIVES = len(METRIC_NAMES)` (currently 6). Never hardcode objective counts — import `N_OBJECTIVES` or `METRIC_NAMES` from `optimization.problem`.
+- Use `pytest-mock`'s `mocker` fixture for patching (already a dev dependency).
 
 ## Python API
 
