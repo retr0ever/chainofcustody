@@ -15,7 +15,7 @@ _DEFAULT_WORKERS = os.cpu_count() or 1
 
 
 def build_algorithm(
-    pop_size: int = 100,
+    pop_size: int = 128,
     mutation_rate: float = 0.01,
 ) -> NSGA3:
     """Construct an NSGA3 instance for nucleotide sequence optimisation.
@@ -24,7 +24,7 @@ def build_algorithm(
         pop_size: Number of individuals in the population.
         mutation_rate: Per-position probability of a point mutation.
     """
-    ref_dirs = get_reference_directions("das-dennis", N_OBJECTIVES, n_partitions=12)
+    ref_dirs = get_reference_directions("das-dennis", N_OBJECTIVES, n_partitions=4)
 
     return NSGA3(
         ref_dirs=ref_dirs,
@@ -38,7 +38,7 @@ def build_algorithm(
 
 def run(
     seq_len: int = 100,
-    pop_size: int = 100,
+    pop_size: int = 128,
     n_gen: int = 50,
     mutation_rate: float = 0.01,
     seed: int | None = None,
