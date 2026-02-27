@@ -1,4 +1,6 @@
+import csv
 import json
+from pathlib import Path
 
 import numpy as np
 import rich_click as click
@@ -10,6 +12,23 @@ from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
 
 console = Console()
 
+_CSV_COLUMNS = ["rank", "label", "sequence", *METRIC_NAMES, "overall"]
+
+
+def _write_csv(path: Path, results: list[dict]) -> None:
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        for rank, r in enumerate(results, start=1):
+            scores = r["fitness"]["scores"]
+            writer.writerow({
+                "rank": rank,
+                "label": r["label"],
+                "sequence": r["sequence"],
+                **{m: round(scores[m]["value"], 4) for m in METRIC_NAMES},
+                "overall": r["fitness"]["overall"],
+            })
+
 
 @click.command()
 @click.option("--seq-len", type=int, default=100, show_default=True, help="Length of each candidate sequence.")
@@ -19,7 +38,8 @@ console = Console()
 @click.option("--seed", type=int, default=None, help="Random seed for reproducibility.")
 @click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
-def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str) -> None:
+@click.option("--csv", "csv_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write Pareto-front results to a CSV file.")
+def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
     """Run NSGA3 to evolve an optimal nucleotide sequence population."""
     console.print(
         f"\nRunning NSGA3 — seq_len=[bold]{seq_len}[/bold]  "
@@ -39,7 +59,7 @@ def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: in
         try:
             report = score_sequence(seq)
             fitness = compute_fitness(report)
-            results.append({"label": f"pareto_{i + 1}", "report": report, "fitness": fitness})
+            results.append({"label": f"pareto_{i + 1}", "sequence": seq, "report": report, "fitness": fitness})
         except Exception:
             continue
 
@@ -48,6 +68,10 @@ def main(seq_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: in
         raise SystemExit(1)
 
     results.sort(key=lambda r: r["fitness"]["overall"], reverse=True)
+
+    if csv_path:
+        _write_csv(csv_path, results)
+        console.print(f"Results written to [bold]{csv_path}[/bold]\n")
 
     if output_fmt == "json":
         out = []

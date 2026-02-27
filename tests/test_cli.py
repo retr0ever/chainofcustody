@@ -13,7 +13,7 @@ def runner():
 def mock_optimize_run(mocker):
     import numpy as np
     from chainofcustody.optimization.problem import N_OBJECTIVES
-    mock = mocker.patch("chainofcustody.optimization.run")
+    mock = mocker.patch("chainofcustody.cli.run")
     mock.return_value = (
         np.array([[0, 1, 2, 3]] * 3),
         np.array([[0.3] * N_OBJECTIVES] * 3),
@@ -24,11 +24,7 @@ def mock_optimize_run(mocker):
 @pytest.fixture
 def mock_scoring(mocker):
     """Mock the evaluation pipeline so optimize tests don't need ViennaRNA etc."""
-    mock_score = mocker.patch("chainofcustody.cli.score_sequence", create=True)
-    mock_fitness = mocker.patch("chainofcustody.cli.compute_fitness", create=True)
-
-    mock_score = mocker.patch("chainofcustody.evaluation.report.score_sequence")
-    mock_score.return_value = {
+    mock_report = {
         "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
         "codon_scores": {"cai": 0.8, "gc_content": {"overall": 50, "cds": 50}, "liver_selectivity": 0.0},
         "mirna_scores": {"detargeting": {"miR-122-5p": {"utr3_sites": 0, "total_sites": 0}}},
@@ -37,7 +33,13 @@ def mock_scoring(mocker):
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "au_rich_elements": 0, "stability_score": 0.7, "status": "GREEN"},
         "summary": {"codon_quality": "GREEN", "gc_content": "GREEN", "mir122_detargeting": "RED", "utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN"},
     }
-    return mock_score
+    mock_fitness = {
+        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["codon_quality", "gc_content", "mir122_detargeting", "utr5_accessibility", "manufacturability", "stability"]},
+        "overall": 0.8,
+        "suggestions": [],
+    }
+    mocker.patch("chainofcustody.cli.score_sequence", return_value=mock_report)
+    mocker.patch("chainofcustody.cli.compute_fitness", return_value=mock_fitness)
 
 
 def test_help(runner):
@@ -81,3 +83,16 @@ def test_workers_is_passed(runner, mock_optimize_run, mock_scoring):
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["n_workers"] == 4
+
+
+def test_csv_output(runner, mock_optimize_run, mock_scoring, tmp_path):
+    csv_file = tmp_path / "results.csv"
+    result = runner.invoke(main, ["--seq-len", "4", "--csv", str(csv_file)])
+
+    assert result.exit_code == 0
+    assert csv_file.exists()
+
+    import csv as csv_mod
+    rows = list(csv_mod.DictReader(csv_file.open()))
+    assert len(rows) == 3
+    assert set(rows[0].keys()) >= {"rank", "label", "sequence", "overall"}
