@@ -14,6 +14,12 @@ from chainofcustody.sequence import mRNASequence
 # the full fold is used automatically (seq <= 2000 nt path in compute_global_mfe).
 _GLOBAL_FOLD_CAP = 150
 
+# When the 5'UTR is long (e.g. 1000 nt), folding the entire region becomes
+# O(n³) ≈ several seconds per sequence.  Only the region immediately upstream
+# of the AUG matters for ribosome scanning, so we fold the last
+# _UTR5_FOLD_WINDOW nt (i.e. the AUG-proximal end) and score that.
+_UTR5_FOLD_WINDOW = 200
+
 
 def fold_sequence(seq: str) -> tuple[str, float]:
     """Fold an RNA sequence. Returns ``(dot_bracket, mfe_kcal_mol)``."""
@@ -52,36 +58,45 @@ def windowed_mfe_values(
 def check_utr5_accessibility(parsed: mRNASequence) -> dict:
     """Check if the 5'UTR is accessible for ribosome loading.
 
-    Folds the 5'UTR + first 30 nt of CDS (ribosome landing zone) and returns
-    the MFE. A strongly negative MFE indicates a well-folded structure, which
-    is associated with efficient ribosome loading.
+    Folds the AUG-proximal end of the 5'UTR (last _UTR5_FOLD_WINDOW nt,
+    including Kozak) and returns MFE/nt.  For short UTRs the full sequence is
+    folded.  Limiting the window keeps ViennaRNA tractable even when the evolved
+    5'UTR reaches 1000 nt, while still scoring the region that matters for
+    ribosome scanning.  Excluding the CDS removes the dominant contribution of
+    the fixed GC-rich start codon context.
+
+    A less negative MFE/nt indicates a more open, accessible structure.
     """
     utr5 = parsed.utr5
     if not utr5 or len(utr5) < 10:
         return {
             "mfe": None,
+            "mfe_per_nt": None,
             "status": "no_utr5",
             "message": "No 5'UTR or too short to assess",
         }
 
-    landing_zone = utr5 + parsed.cds[:30]
-    structure, mfe = fold_sequence(landing_zone)
+    fold_region = utr5[-_UTR5_FOLD_WINDOW:] if len(utr5) > _UTR5_FOLD_WINDOW else utr5
+    structure, mfe = fold_sequence(fold_region)
+    mfe_per_nt = mfe / len(fold_region)
 
-    if mfe >= -20:
+    if mfe_per_nt >= -0.1:
         status = "GREEN"
-        message = "5'UTR is accessible — low secondary structure allows efficient ribosome loading"
-    elif mfe >= -30:
+        message = "5'UTR is accessible — weak secondary structure"
+    elif mfe_per_nt >= -0.3:
         status = "AMBER"
         message = "5'UTR has moderate secondary structure"
     else:
         status = "RED"
-        message = "5'UTR is highly structured — may impede ribosome loading"
+        message = "5'UTR is highly structured — may impede ribosome scanning"
 
     return {
         "mfe": round(mfe, 2),
+        "mfe_per_nt": round(mfe_per_nt, 4),
+        "utr5_length": len(utr5),
+        "fold_window": len(fold_region),
         "status": status,
         "message": message,
-        "landing_zone_length": len(landing_zone),
     }
 
 

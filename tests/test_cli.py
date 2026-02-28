@@ -8,7 +8,7 @@ _CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
 _UTR3 = "GAGTAGUCCC"
 _UTR5_MIN = 4
 _UTR5_MAX = 10
-_OFF_TARGET_CELL_TYPE = "Dendritic_cell"
+_OFF_TARGET_CELL_TYPE = "Hepatocyte"
 
 
 @pytest.fixture
@@ -55,15 +55,23 @@ def mock_optimize_run(mocker):
 def mock_scoring(mocker):
     """Mock the evaluation pipeline so optimize tests don't need DRfold2/RiboNN."""
     mock_report = {
-        "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
-        "structure_scores": {"utr5_accessibility": {"mfe": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
-        "manufacturing_scores": {"total_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
+        "sequence_info": {"total_length": 4, "full_length": 127, "cap5_length": 3, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "poly_a_length": 120, "num_codons": 1},
+        "structure_scores": {"utr5_accessibility": {"mfe": None, "mfe_per_nt": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
+        "manufacturing_scores": {"total_violations": 0, "utr5_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "stability_score": 0.7, "status": "GREEN"},
-        "ribonn_scores": {"mean_te": 1.8, "per_tissue": None, "status": "GREEN", "message": "RiboNN predicted mean TE = 1.8000"},
-        "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "translation_efficiency": "GREY"},
+        "ribonn_scores": {
+            "mean_te": 1.8,
+            "target_cell_type": "megakaryocytes",
+            "target_te": 2.2,
+            "mean_off_target_te": 0.9,
+            "per_tissue": None,
+            "status": "GREEN",
+            "message": "RiboNN: megakaryocytes TE = 2.2000, mean off-target = 0.9000",
+        },
+        "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "specificity": "GREY"},
     }
     mock_fitness = {
-        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["utr5_accessibility", "manufacturability", "stability", "translation_efficiency"]},
+        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["utr5_accessibility", "manufacturability", "stability", "specificity"]},
         "overall": 0.8,
         "suggestions": [],
     }
@@ -88,9 +96,10 @@ def test_summary_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_
     assert result.exit_code == 0, result.output
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
     _, kwargs = mock_optimize_run.call_args
-    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
+    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers", "initial_length", "max_length_delta")} == {
         "utr5_min": _UTR5_MIN, "utr5_max": _UTR5_MAX,
-        "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
+        "pop_size": 10, "n_gen": 2, "mutation_rate": 0.05, "seed": None, "n_workers": None,
+        "initial_length": 200, "max_length_delta": 50,
     }
 
 
@@ -167,6 +176,29 @@ def test_off_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, 
 def test_off_target_cell_type_not_found(runner, mock_get_cds, mocker):
     mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("Unknown cell type 'BADTYPE'"))
     result = runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "BADTYPE"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    result = runner.invoke(main, ["--gene", _GENE])
+
+    assert result.exit_code == 0, result.output
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["target_cell_type"] == "megakaryocytes"
+
+
+def test_target_cell_type_custom(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    result = runner.invoke(main, ["--gene", _GENE, "--target-cell-type", "HeLa"])
+
+    assert result.exit_code == 0, result.output
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["target_cell_type"] == "HeLa"
+
+
+def test_target_cell_type_invalid(runner, mock_get_cds, mock_generate_utr3):
+    result = runner.invoke(main, ["--gene", _GENE, "--target-cell-type", "NotARealTissue"])
 
     assert result.exit_code == 1
     assert "Error" in result.output

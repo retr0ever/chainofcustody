@@ -139,10 +139,36 @@ def test_mutation_invalid_rate():
         NucleotideMutation(mutation_rate=1.5)
 
 
+def test_sampling_initial_length():
+    """NucleotideSampling with initial_length centres population lengths around that value."""
+    problem = _problem(utr5_min=_UTR5_MIN, utr5_max=_UTR5_MAX)
+    sampling = NucleotideSampling(initial_length=10)
+    X = sampling._do(problem, n_samples=200)
+    assert X.shape == (200, _UTR5_MAX + 1)
+    # All lengths must stay within bounds
+    assert np.all(X[:, 0] >= _UTR5_MIN) and np.all(X[:, 0] <= _UTR5_MAX)
+    # Mean should be close to 10 (within a reasonable range given the small UTR range)
+    assert abs(X[:, 0].mean() - 10) < 5
+
+
+def test_mutation_max_length_delta():
+    """NucleotideMutation respects max_length_delta for the length variable."""
+    problem = _problem(utr5_min=_UTR5_MIN, utr5_max=_UTR5_MAX)
+    initial_length = (_UTR5_MIN + _UTR5_MAX) // 2
+    X = np.column_stack([
+        np.full(50, initial_length),
+        np.zeros((50, _UTR5_MAX), dtype=int),
+    ])
+    mutation = NucleotideMutation(mutation_rate=1.0, max_length_delta=2)
+    X_mut = mutation._do(problem, X)
+    # Length change per individual must not exceed max_length_delta=2
+    assert np.all(np.abs(X_mut[:, 0] - initial_length) <= 2)
+
+
 # ── End-to-end ────────────────────────────────────────────────────────────────
 
 def test_run_returns_pareto_front():
-    X, F, history = run(utr5_min=4, utr5_max=20, cds=_CDS, utr3=_UTR3, pop_size=128, n_gen=3, seed=42)
+    X, F, history = run(utr5_min=4, utr5_max=20, cds=_CDS, utr3=_UTR3, pop_size=128, n_gen=3, seed=42, initial_length=10)
     assert X.ndim == 2
     assert X.shape[1] == 21  # utr5_max + 1
     assert F.shape[1] == N_METRICS

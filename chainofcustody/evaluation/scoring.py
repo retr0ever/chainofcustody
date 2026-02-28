@@ -1,6 +1,6 @@
 """Orchestrate the full 4-metric scoring pipeline over a parsed mRNA sequence."""
 
-from chainofcustody.sequence import mRNASequence
+from chainofcustody.sequence import CAP5, POLY_A_LENGTH, mRNASequence
 from chainofcustody.evaluation.structure import fold_sequence_bounded, fold_sequence, score_structure
 from chainofcustody.evaluation.manufacturing import score_manufacturing
 from chainofcustody.evaluation.stability import score_stability
@@ -12,6 +12,7 @@ def score_parsed(
     target: str | None = None,
     _ribonn_scores: dict | None = None,
     _fast_fold: bool = False,
+    target_cell_type: str = "megakaryocytes",
 ) -> dict:
     """Run all 4 evaluation metrics on an already-parsed mRNA sequence.
 
@@ -44,7 +45,7 @@ def score_parsed(
     structure_scores = score_structure(parsed, _precomputed_global=global_fold)
     manufacturing_scores = score_manufacturing(parsed)
     stability_scores = score_stability(parsed, _precomputed_mfe=global_fold[1])
-    ribonn_scores = _ribonn_scores if _ribonn_scores is not None else score_ribonn(parsed)
+    ribonn_scores = _ribonn_scores if _ribonn_scores is not None else score_ribonn(parsed, target_cell_type=target_cell_type)
 
     mfg_violations = manufacturing_scores.get("total_violations", 0)
 
@@ -52,15 +53,18 @@ def score_parsed(
         "utr5_accessibility": structure_scores.get("utr5_accessibility", {}).get("status", "GREY"),
         "manufacturability": _traffic_light(-mfg_violations, (-3, 0), (-999, 0)),
         "stability": stability_scores.get("status", "GREY"),
-        "translation_efficiency": ribonn_scores.get("status", "GREY"),
+        "specificity": ribonn_scores.get("status", "GREY"),
     }
 
     return {
         "sequence_info": {
             "total_length": len(parsed),
+            "full_length": parsed.full_length,
+            "cap5_length": len(CAP5),
             "utr5_length": len(parsed.utr5),
             "cds_length": len(parsed.cds),
             "utr3_length": len(parsed.utr3),
+            "poly_a_length": POLY_A_LENGTH,
             "num_codons": len(parsed.codons),
         },
         "structure_scores": structure_scores,

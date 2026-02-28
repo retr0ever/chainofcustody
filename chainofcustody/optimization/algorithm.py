@@ -31,13 +31,17 @@ class _ProgressCallback(Callback):
 
 def build_algorithm(
     pop_size: int = 128,
-    mutation_rate: float = 0.01,
+    mutation_rate: float = 0.05,
+    initial_length: int | None = None,
+    max_length_delta: int = 50,
 ) -> NSGA3:
     """Construct an NSGA3 instance for nucleotide sequence optimisation.
 
     Args:
         pop_size: Number of individuals in the population.
         mutation_rate: Per-position probability of a point mutation.
+        initial_length: Seed the population around this 5'UTR length (None = uniform).
+        max_length_delta: Maximum nt change to the length variable per mutation event.
     """
     # n_partitions=3 → 84 Das-Dennis reference points for 6 objectives,
     # which fits within the default pop_size=128 (NSGA-III requires pop_size ≥ n_ref_points).
@@ -46,9 +50,9 @@ def build_algorithm(
     return NSGA3(
         ref_dirs=ref_dirs,
         pop_size=pop_size,
-        sampling=NucleotideSampling(),
+        sampling=NucleotideSampling(initial_length=initial_length),
         crossover=UniformCrossover(),
-        mutation=NucleotideMutation(mutation_rate=mutation_rate),
+        mutation=NucleotideMutation(mutation_rate=mutation_rate, max_length_delta=max_length_delta),
         eliminate_duplicates=True,
     )
 
@@ -73,18 +77,21 @@ def _build_history(result, cds: str, utr3: str) -> list[dict]:
 
 
 def run(
-    utr5_min: int = 10,
-    utr5_max: int = 100,
+    utr5_min: int = 20,
+    utr5_max: int = 1000,
     cds: str = "",
     utr3: str = "",
     pop_size: int = 128,
     n_gen: int = 50,
-    mutation_rate: float = 0.01,
+    mutation_rate: float = 0.05,
     seed: int | None = None,
     verbose: bool = False,
     n_workers: int | None = None,
     progress=None,
     progress_task=None,
+    target_cell_type: str = "megakaryocytes",
+    initial_length: int | None = 200,
+    max_length_delta: int = 50,
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
@@ -110,6 +117,8 @@ def run(
         n_workers: Ignored. Kept for API compatibility.
         progress: Optional Rich Progress instance for a live progress bar.
         progress_task: Task ID returned by ``progress.add_task``.
+        initial_length: Seed population 5'UTR lengths around this value (None = uniform).
+        max_length_delta: Maximum nt change to the length variable per mutation event.
 
     Returns:
         A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
@@ -117,8 +126,13 @@ def run(
         and ``history`` is a list of per-generation population records
         (full assembled sequences) suitable for CSV export.
     """
-    algorithm = build_algorithm(pop_size=pop_size, mutation_rate=mutation_rate)
-    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
+    algorithm = build_algorithm(
+        pop_size=pop_size,
+        mutation_rate=mutation_rate,
+        initial_length=initial_length,
+        max_length_delta=max_length_delta,
+    )
+    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3, target_cell_type=target_cell_type)
 
     from chainofcustody.progress import update_status  # noqa: PLC0415
     update_status("loading RiboNN models into GPU…")

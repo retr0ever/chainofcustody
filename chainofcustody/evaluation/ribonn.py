@@ -63,6 +63,12 @@ _N_CHANNELS = 5
 # Map nucleotide → channel index (DNA alphabet; U treated as T)
 _NT_INDEX: dict[str, int] = {"A": 0, "T": 1, "U": 1, "C": 2, "G": 3}
 
+# Pre-built 256-entry LUT: ASCII byte value → channel index (0 for unknowns).
+# Built once at import time; reused for every sequence in every epoch.
+_NT_LUT: np.ndarray = np.zeros(256, dtype=np.int8)
+for _ch, _idx in _NT_INDEX.items():
+    _NT_LUT[ord(_ch)] = _idx
+
 
 def _ensure_importable() -> None:
     """Add vendor/RiboNN to sys.path so src.* modules can be imported."""
@@ -71,10 +77,40 @@ def _ensure_importable() -> None:
         sys.path.insert(0, ribonn_str)
 
 
-def _te_status(mean_te: float) -> str:
-    if mean_te >= 1.5:
+_HUMAN_TISSUE_NAMES: list[str] = [
+    c.strip().removeprefix("TE_")
+    for c in (
+        "TE_108T,TE_12T,TE_A2780,TE_A549,TE_BJ,TE_BRx.142,TE_C643,TE_CRL.1634,"
+        "TE_Calu.3,TE_Cybrid_Cells,TE_H1.hESC,TE_H1933,TE_H9.hESC,TE_HAP.1,"
+        "TE_HCC_tumor,TE_HCC_adjancent_normal,TE_HCT116,TE_HEK293,TE_HEK293T,"
+        "TE_HMECs,TE_HSB2,TE_HSPCs,TE_HeLa,TE_HeLa_S3,TE_HepG2,TE_Huh.7.5,"
+        "TE_Huh7,TE_K562,TE_Kidney_normal_tissue,TE_LCL,TE_LuCaP.PDX,TE_MCF10A,"
+        "TE_MCF10A.ER.Src,TE_MCF7,TE_MD55A3,TE_MDA.MB.231,TE_MM1.S,TE_MOLM.13,"
+        "TE_Molt.3,TE_Mutu,TE_OSCC,TE_PANC1,TE_PATU.8902,TE_PC3,TE_PC9,"
+        "TE_Primary_CD4._T.cells,TE_Primary_human_bronchial_epithelial_cells,"
+        "TE_RD.CCL.136,TE_RPE.1,TE_SH.SY5Y,TE_SUM159PT,TE_SW480TetOnAPC,"
+        "TE_T47D,TE_THP.1,TE_U.251,TE_U.343,TE_U2392,TE_U2OS,TE_Vero_6,"
+        "TE_WI38,TE_WM902B,TE_WTC.11,TE_ZR75.1,TE_cardiac_fibroblasts,TE_ccRCC,"
+        "TE_early_neurons,TE_fibroblast,TE_hESC,TE_human_brain_tumor,"
+        "TE_iPSC.differentiated_dopamine_neurons,TE_megakaryocytes,TE_muscle_tissue,"
+        "TE_neuronal_precursor_cells,TE_neurons,TE_normal_brain_tissue,"
+        "TE_normal_prostate,TE_primary_macrophages,TE_skeletal_muscle"
+    ).split(",")
+]
+
+
+def get_valid_tissue_names(species: str = "human") -> list[str]:
+    """Return the tissue names available for *species* without loading model weights."""
+    if species != "human":
+        raise ValueError(f"Only 'human' tissue names are available statically; got {species!r}")
+    return list(_HUMAN_TISSUE_NAMES)
+
+
+def _te_status(target_te: float, mean_off_target_te: float) -> str:
+    selectivity = target_te - mean_off_target_te
+    if target_te >= 1.5 and selectivity >= 0.5:
         return "GREEN"
-    if mean_te >= 1.0:
+    if target_te >= 1.0 and selectivity >= 0.0:
         return "AMBER"
     return "RED"
 
@@ -117,10 +153,7 @@ def _encode_sequences_vectorized(
         tx = np.frombuffer((utr5 + cds + utr3).encode(), dtype=np.uint8)
 
         # One-hot: map each character to its channel index via a lookup table
-        lut = np.zeros(256, dtype=np.int8)
-        for ch, idx in _NT_INDEX.items():
-            lut[ord(ch)] = idx
-        nt_channels = lut[tx]  # shape (tx_len,)
+        nt_channels = _NT_LUT[tx]  # shape (tx_len,)
 
         # Position in the padded tensor: UTR5 is right-aligned to _MAX_UTR5_LEN
         pad_offset = _MAX_UTR5_LEN - utr5_len  # start position in padded axis
@@ -162,6 +195,9 @@ class RiboNNPredictor:
         self._species = species
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # Enable TF32 on Ampere+ GPUs — uses tensor cores for matmuls at no API cost.
+        torch.set_float32_matmul_precision("high")
+
         run_df = pd.read_csv(ribonn_dir / "models" / species / "runs.csv")
         config = extract_config(run_df, run_df.run_id[0])
         config["species"] = species
@@ -201,54 +237,53 @@ class RiboNNPredictor:
         update_status("RiboNN  ready")
 
     def _get_predicted_cols(self) -> list[str]:
-        human_cols = (
-            "TE_108T,TE_12T,TE_A2780,TE_A549,TE_BJ,TE_BRx.142,TE_C643,TE_CRL.1634,"
-            "TE_Calu.3,TE_Cybrid_Cells,TE_H1.hESC,TE_H1933,TE_H9.hESC,TE_HAP.1,"
-            "TE_HCC_tumor,TE_HCC_adjancent_normal,TE_HCT116,TE_HEK293,TE_HEK293T,"
-            "TE_HMECs,TE_HSB2,TE_HSPCs,TE_HeLa,TE_HeLa_S3,TE_HepG2,TE_Huh.7.5,"
-            "TE_Huh7,TE_K562,TE_Kidney_normal_tissue,TE_LCL,TE_LuCaP.PDX,TE_MCF10A,"
-            "TE_MCF10A.ER.Src,TE_MCF7,TE_MD55A3,TE_MDA.MB.231,TE_MM1.S,TE_MOLM.13,"
-            "TE_Molt.3,TE_Mutu,TE_OSCC,TE_PANC1,TE_PATU.8902,TE_PC3,TE_PC9,"
-            "TE_Primary_CD4._T.cells,TE_Primary_human_bronchial_epithelial_cells,"
-            "TE_RD.CCL.136,TE_RPE.1,TE_SH.SY5Y,TE_SUM159PT,TE_SW480TetOnAPC,"
-            "TE_T47D,TE_THP.1,TE_U.251,TE_U.343,TE_U2392,TE_U2OS,TE_Vero_6,"
-            "TE_WI38,TE_WM902B,TE_WTC.11,TE_ZR75.1,TE_cardiac_fibroblasts,TE_ccRCC,"
-            "TE_early_neurons,TE_fibroblast,TE_hESC,TE_human_brain_tumor,"
-            "TE_iPSC.differentiated_dopamine_neurons,TE_megakaryocytes,TE_muscle_tissue,"
-            "TE_neuronal_precursor_cells,TE_neurons,TE_normal_brain_tissue,"
-            "TE_normal_prostate,TE_primary_macrophages,TE_skeletal_muscle"
-        )
-        mouse_cols = (
-            "TE_3T3,TE_4T1,TE_A3-1_mESC,TE_B16_melanoma_cell,"
-            "TE_Bone_marrow_derived_macrophage,TE_Bone_marrow_derived_primary_dendritic_cells,"
-            "TE_Bone_marrow_derived_regulatory_dendritic_cells,TE_CD4_T-cells,TE_CGR8_mESC,"
-            "TE_Cerebellum,TE_DRG_neuronal_culture,TE_Dorsal_section_of_lumbar_spinal_cord,"
-            "TE_E14_mESC,TE_E14Tg2a_mESC,TE_ES_cell_derived_neurons,TE_Epiblast_like_cells,"
-            "TE_Epidermal_basal_cells,TE_Fetal_cortex,TE_Flt3L-DC,TE_Forebrain,TE_HFSC,"
-            "TE_Ileum,TE_J1_mESC,TE_KH2_mESC,"
-            "TE_KRPC-A_cells_(from_gen._eng._murine_tumors),TE_MN1_cells,TE_Mammary_tissue,"
-            "TE_Mouse_back_skins,TE_NSC,TE_Neuro2a,"
-            "TE_Neurons_(DIV_8)_derived_from_CGR8_ES_cells,TE_P19,TE_Primary_Keratinocytes,"
-            "TE_Primary_cortical_neurons,TE_Quadriceps_muscle,TE_R1_mESC,TE_R1/E_mESC,"
-            "TE_RAW264.7,TE_RF8_mESC,"
-            "TE_Spontaneously_Immortalized_Mouse_Keratinocyte_Cult,TE_Striatal_cells,"
-            "TE_T-ALL,TE_brain,TE_dentate_gyrus,TE_duodenum,TE_embryonic_fibroblast,"
-            "TE_embryonic_stem_cells,TE_epididymal_white_fat,TE_forelimbs,"
-            "TE_gastrocnemius_tissue,TE_heart,TE_hippocampal,TE_interscapular_brown_fat,"
-            "TE_kidney,TE_liver,TE_lung,TE_lymphoid_ba/f3_cells,TE_mouse_eye,"
-            "TE_neural_tube,TE_neutrophils,TE_pancreas,TE_resting_state_T_cells,"
-            "TE_skeletal_muscle,TE_skin_squamous_tumours_(skin_papilloma),"
-            "TE_subcutaneous_white_fat,TE_testis,TE_tibialis_anterior_tissue,TE_v6.5_mESC"
-        )
-        cols = human_cols if self._species == "human" else mouse_cols
-        return [c.replace("TE_", "predicted_TE_") for c in cols.split(",")]
+        if self._species == "human":
+            names = _HUMAN_TISSUE_NAMES
+        else:
+            mouse_names = [
+                c.strip().removeprefix("TE_")
+                for c in (
+                    "TE_3T3,TE_4T1,TE_A3-1_mESC,TE_B16_melanoma_cell,"
+                    "TE_Bone_marrow_derived_macrophage,TE_Bone_marrow_derived_primary_dendritic_cells,"
+                    "TE_Bone_marrow_derived_regulatory_dendritic_cells,TE_CD4_T-cells,TE_CGR8_mESC,"
+                    "TE_Cerebellum,TE_DRG_neuronal_culture,TE_Dorsal_section_of_lumbar_spinal_cord,"
+                    "TE_E14_mESC,TE_E14Tg2a_mESC,TE_ES_cell_derived_neurons,TE_Epiblast_like_cells,"
+                    "TE_Epidermal_basal_cells,TE_Fetal_cortex,TE_Flt3L-DC,TE_Forebrain,TE_HFSC,"
+                    "TE_Ileum,TE_J1_mESC,TE_KH2_mESC,"
+                    "TE_KRPC-A_cells_(from_gen._eng._murine_tumors),TE_MN1_cells,TE_Mammary_tissue,"
+                    "TE_Mouse_back_skins,TE_NSC,TE_Neuro2a,"
+                    "TE_Neurons_(DIV_8)_derived_from_CGR8_ES_cells,TE_P19,TE_Primary_Keratinocytes,"
+                    "TE_Primary_cortical_neurons,TE_Quadriceps_muscle,TE_R1_mESC,TE_R1/E_mESC,"
+                    "TE_RAW264.7,TE_RF8_mESC,"
+                    "TE_Spontaneously_Immortalized_Mouse_Keratinocyte_Cult,TE_Striatal_cells,"
+                    "TE_T-ALL,TE_brain,TE_dentate_gyrus,TE_duodenum,TE_embryonic_fibroblast,"
+                    "TE_embryonic_stem_cells,TE_epididymal_white_fat,TE_forelimbs,"
+                    "TE_gastrocnemius_tissue,TE_heart,TE_hippocampal,TE_interscapular_brown_fat,"
+                    "TE_kidney,TE_liver,TE_lung,TE_lymphoid_ba/f3_cells,TE_mouse_eye,"
+                    "TE_neural_tube,TE_neutrophils,TE_pancreas,TE_resting_state_T_cells,"
+                    "TE_skeletal_muscle,TE_skin_squamous_tumours_(skin_papilloma),"
+                    "TE_subcutaneous_white_fat,TE_testis,TE_tibialis_anterior_tissue,TE_v6.5_mESC"
+                ).split(",")
+            ]
+            names = mouse_names
+        return [f"predicted_TE_{n}" for n in names]
 
-    def predict_batch(self, sequences: list[mRNASequence]) -> list[dict]:
+    def predict_batch(
+        self,
+        sequences: list[mRNASequence],
+        target_cell_type: str = "megakaryocytes",
+    ) -> list[dict]:
         """Score a batch of sequences in one GPU pass.
 
         Encodes the whole batch with vectorized numpy (bypassing the slow
         per-character Python loop in ``DataFrameDataset.__getitem__``), then
         runs a single forward pass per model with the full batch on GPU.
+
+        Args:
+            sequences: Batch of sequences to score.
+            target_cell_type: Tissue name that should have *high* TE.  All
+                other tissues are treated as off-target (low TE desired).
+                Must be a key in the per-tissue prediction dict.
 
         Returns one result dict per input sequence.
         """
@@ -272,22 +307,41 @@ class RiboNNPredictor:
         # Average across folds: (N, n_tissues)
         mean_preds = np.stack(all_fold_preds).mean(axis=0)
 
+        # Resolve the index of the target tissue once for the whole batch
+        tissue_names = [col.removeprefix("predicted_TE_") for col in self._predicted_cols]
+        if target_cell_type not in tissue_names:
+            raise ValueError(
+                f"Unknown target cell type {target_cell_type!r}. "
+                f"Valid names: {', '.join(sorted(tissue_names))}"
+            )
+        target_idx = tissue_names.index(target_cell_type)
+
         results: list[dict] = []
         for i in range(n):
             if not valid[i]:
-                results.append(_null_result())
+                results.append(_null_result(target_cell_type))
                 continue
             tissue_preds = mean_preds[i]
             mean_te = float(tissue_preds.mean())
+            target_te = float(tissue_preds[target_idx])
+            off_target_mask = np.ones(len(tissue_preds), dtype=bool)
+            off_target_mask[target_idx] = False
+            mean_off_target_te = float(tissue_preds[off_target_mask].mean())
             per_tissue = {
-                col.removeprefix("predicted_TE_"): round(float(v), 4)
-                for col, v in zip(self._predicted_cols, tissue_preds)
+                name: round(float(v), 4)
+                for name, v in zip(tissue_names, tissue_preds)
             }
             results.append({
                 "mean_te": round(mean_te, 4),
-                "per_tissue": per_tissue or None,
-                "status": _te_status(mean_te),
-                "message": f"RiboNN predicted mean TE = {mean_te:.4f}",
+                "target_cell_type": target_cell_type,
+                "target_te": round(target_te, 4),
+                "mean_off_target_te": round(mean_off_target_te, 4),
+                "per_tissue": per_tissue,
+                "status": _te_status(target_te, mean_off_target_te),
+                "message": (
+                    f"RiboNN: {target_cell_type} TE = {target_te:.4f}, "
+                    f"mean off-target = {mean_off_target_te:.4f}"
+                ),
             })
 
         return results
@@ -312,27 +366,33 @@ def get_predictor(ribonn_dir: Path = _RIBONN_DIR) -> RiboNNPredictor:
 # Public API
 # ---------------------------------------------------------------------------
 
-def score_ribonn(parsed: mRNASequence) -> dict:
+def score_ribonn(parsed: mRNASequence, target_cell_type: str = "megakaryocytes") -> dict:
     """Predict translation efficiency for a single sequence using RiboNN.
 
     Loads models on first call; subsequent calls reuse cached GPU models.
     """
-    return get_predictor().predict_batch([parsed])[0]
+    return get_predictor().predict_batch([parsed], target_cell_type=target_cell_type)[0]
 
 
-def score_ribonn_batch(sequences: list[mRNASequence]) -> list[dict]:
+def score_ribonn_batch(
+    sequences: list[mRNASequence],
+    target_cell_type: str = "megakaryocytes",
+) -> list[dict]:
     """Predict translation efficiency for a list of sequences in one GPU pass.
 
     Significantly faster than calling :func:`score_ribonn` in a loop because
     the whole population is encoded and forwarded in a single vectorized
     operation.
     """
-    return get_predictor().predict_batch(sequences)
+    return get_predictor().predict_batch(sequences, target_cell_type=target_cell_type)
 
 
-def _null_result() -> dict:
+def _null_result(target_cell_type: str = "megakaryocytes") -> dict:
     return {
         "mean_te": 0.0,
+        "target_cell_type": target_cell_type,
+        "target_te": 0.0,
+        "mean_off_target_te": 0.0,
         "per_tissue": None,
         "status": "RED",
         "message": "Sequence excluded (exceeds RiboNN length limits)",

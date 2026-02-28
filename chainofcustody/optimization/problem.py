@@ -8,7 +8,7 @@ from chainofcustody.sequence import KOZAK, mRNASequence
 from chainofcustody.evaluation.scoring import score_parsed
 from chainofcustody.evaluation.ribonn import score_ribonn_batch
 from chainofcustody.evaluation.fitness import compute_fitness
-from chainofcustody.progress import update_status
+from chainofcustody.progress import update_status, update_best_score
 
 _CPU_WORKERS = os.cpu_count() or 1
 
@@ -23,7 +23,7 @@ METRIC_NAMES = [
     "utr5_accessibility",
     "manufacturability",
     "stability",
-    "translation_efficiency",
+    "specificity",
 ]
 N_OBJECTIVES = len(METRIC_NAMES)
 
@@ -69,7 +69,7 @@ class SequenceProblem(Problem):
     ThreadPoolExecutor (it releases the GIL, so threads scale well).
     """
 
-    def __init__(self, utr5_min: int, utr5_max: int, cds: str, utr3: str, **kwargs) -> None:
+    def __init__(self, utr5_min: int, utr5_max: int, cds: str, utr3: str, target_cell_type: str = "megakaryocytes", **kwargs) -> None:
         if utr5_min < 0 or utr5_max < utr5_min:
             raise ValueError(
                 f"utr5_min/utr5_max must satisfy 0 ≤ utr5_min ≤ utr5_max, "
@@ -79,6 +79,7 @@ class SequenceProblem(Problem):
         self.utr5_max = utr5_max
         self.cds = cds
         self.utr3 = utr3
+        self.target_cell_type = target_cell_type
         self._gen = 0  # incremented on each _evaluate call
 
         xl = np.array([utr5_min] + [0] * utr5_max)
@@ -119,7 +120,7 @@ class SequenceProblem(Problem):
         # --- GPU: RiboNN batch inference ---
         update_status(f"{gen_tag}  RiboNN GPU inference ({n} seqs)")
         try:
-            ribonn_results = score_ribonn_batch(parsed_list)
+            ribonn_results = score_ribonn_batch(parsed_list, target_cell_type=self.target_cell_type)
         except Exception as exc:
             logger.warning("Batch RiboNN scoring failed: %s", exc)
             ribonn_results = [None] * n
@@ -130,7 +131,7 @@ class SequenceProblem(Problem):
         def _score_one(args: tuple[int, mRNASequence, dict | None]) -> tuple[int, np.ndarray]:
             idx, parsed, ribonn_scores = args
             try:
-                report = score_parsed(parsed, _ribonn_scores=ribonn_scores, _fast_fold=True)
+                report = score_parsed(parsed, _ribonn_scores=ribonn_scores, _fast_fold=True, target_cell_type=self.target_cell_type)
                 fitness = compute_fitness(report)
                 f_row = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
             except Exception as exc:
@@ -147,6 +148,12 @@ class SequenceProblem(Problem):
 
         update_status(f"{gen_tag}  done")
         out["F"] = F
+
+        # Broadcast the best weighted overall score in this generation
+        from chainofcustody.evaluation.fitness import DEFAULT_WEIGHTS  # noqa: PLC0415
+        weights = np.array([DEFAULT_WEIGHTS.get(m, 0) for m in METRIC_NAMES])
+        overall_scores = 1.0 - F @ weights  # shape (n,); higher = better
+        update_best_score(float(overall_scores.max()))
 
     def decode(self, X: np.ndarray) -> list[str]:
         """Convert integer-encoded rows to full assembled sequences."""
