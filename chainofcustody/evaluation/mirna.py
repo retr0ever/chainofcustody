@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 from chainofcustody.sequence import mRNASequence
+from .utils import reverse_complement
 
 # miRNA library: name -> mature sequence (RNA, 5'->3')
 MIRNA_LIBRARY = {
@@ -28,24 +29,18 @@ class MirnaSiteHit:
     seed_seq: str  # the matched seed sequence
 
 
-def _reverse_complement(seq: str) -> str:
-    """Reverse complement of an RNA sequence."""
-    comp = {"A": "U", "U": "A", "G": "C", "C": "G"}
-    return "".join(comp[nt] for nt in reversed(seq))
-
-
 def _get_seed_target(mirna_rna: str) -> str:
     """
     Get the RNA target sequence for the miRNA seed region (nt 2-8).
     This is the reverse complement of the seed, in RNA.
     """
     seed_rna = mirna_rna[1:8]  # positions 2-8 (0-indexed: 1-7)
-    return _reverse_complement(seed_rna)
+    return reverse_complement(seed_rna)
 
 
 def _get_full_target(mirna_rna: str) -> str:
     """Get the full reverse complement target sequence in RNA."""
-    return _reverse_complement(mirna_rna)
+    return reverse_complement(mirna_rna)
 
 
 def _classify_region(pos: int, parsed: mRNASequence) -> str:

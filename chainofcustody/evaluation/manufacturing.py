@@ -3,6 +3,7 @@
 import re
 
 from chainofcustody.sequence import mRNASequence
+from .utils import reverse_complement
 
 # Common restriction enzyme recognition sites to avoid
 RESTRICTION_SITES = {
@@ -89,8 +90,7 @@ def check_restriction_sites(seq: str, sites: dict[str, str] | None = None) -> di
                 "strand": "forward",
             })
         # Check reverse complement
-        comp = {"A": "U", "U": "A", "G": "C", "C": "G"}
-        rc = "".join(comp[nt] for nt in reversed(recognition_seq))
+        rc = reverse_complement(recognition_seq)
         if rc != recognition_seq:  # skip palindromes (already found)
             for m in re.finditer(re.escape(rc), seq):
                 violations.append({
