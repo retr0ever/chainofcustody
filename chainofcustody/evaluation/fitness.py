@@ -1,12 +1,11 @@
 """Normalised fitness scoring and suggestion engine for candidate ranking."""
 
 DEFAULT_WEIGHTS = {
-    "codon_quality": 0.15,
-    "gc_content": 0.10,
-    "mir122_detargeting": 0.25,
-    "utr5_accessibility": 0.10,
-    "manufacturability": 0.15,
-    "stability": 0.25,
+    "codon_quality": 0.20,
+    "gc_content": 0.15,
+    "utr5_accessibility": 0.15,
+    "manufacturability": 0.20,
+    "stability": 0.30,
 }
 
 
@@ -24,12 +23,6 @@ def _normalise_gc(report: dict) -> float:
         return max(0.0, (gc - 20) / 20)
     else:
         return max(0.0, (80 - gc) / 20)
-
-
-def _normalise_mir122(report: dict) -> float:
-    """min(utr3_sites / 3, 1.0) — 3+ sites in 3'UTR = perfect."""
-    sites = report["mirna_scores"].get("detargeting", {}).get("miR-122-5p", {}).get("utr3_sites", 0)
-    return min(sites / 3, 1.0)
 
 
 def _normalise_utr5(report: dict) -> float:
@@ -58,7 +51,6 @@ def _normalise_stability(report: dict) -> float:
 NORMALISERS = {
     "codon_quality": _normalise_cai,
     "gc_content": _normalise_gc,
-    "mir122_detargeting": _normalise_mir122,
     "utr5_accessibility": _normalise_utr5,
     "manufacturability": _normalise_manufacturing,
     "stability": _normalise_stability,
@@ -136,11 +128,6 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
     if metric == "gc_content":
         gc = report["codon_scores"]["gc_content"]["cds"]
         return f"Adjust GC content in CDS (current: {gc:.1f}%, target: 40-60%)"
-
-    if metric == "mir122_detargeting":
-        sites = report["mirna_scores"]["detargeting"].get("miR-122-5p", {}).get("utr3_sites", 0)
-        need = max(0, 3 - sites)
-        return f"Add {need}+ miR-122-5p seed sites (CACTCC) to 3'UTR with >=8nt spacing"
 
     if metric == "utr5_accessibility":
         mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")

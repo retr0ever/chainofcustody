@@ -16,7 +16,6 @@ N_NUCLEOTIDES = len(NUCLEOTIDES)
 METRIC_NAMES = [
     "codon_quality",
     "gc_content",
-    "mir122_detargeting",
     "utr5_accessibility",
     "manufacturability",
     "stability",

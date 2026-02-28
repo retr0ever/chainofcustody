@@ -9,17 +9,18 @@ chainofcustody/
   cli.py              # Single CLI entry point (chainofcustody command, optimize only)
   sequence.py         # mRNASequence dataclass + KOZAK constant
   cds/                # Gene fetching from Ensembl (get_canonical_cds)
-  evaluation/          # 6-metric scoring pipeline
+  evaluation/          # 5-metric scoring pipeline
     codons.py          # Metric 1: CAI, GC content, rare codon clusters, liver/target selectivity
-    mirna.py           # Metric 3: miR-122 seed site scanning + accidental match warnings
-    structure.py       # Metric 4: ViennaRNA folding (5'UTR accessibility, global MFE)
-    manufacturing.py   # Metric 5: GC windows, homopolymers, restriction sites
-    stability.py       # Metric 6: GC3, MFE/nt, AU-rich elements
+    structure.py       # Metric 2: ViennaRNA folding (5'UTR accessibility, global MFE)
+    manufacturing.py   # Metric 3: GC windows, homopolymers, restriction sites
+    stability.py       # Metric 4: GC3, MFE/nt, AU-rich elements
+    scoring.py         # Pipeline orchestrator: runs all metrics, builds report + summary
     fitness.py         # Normalisation (all metrics to 0-1), weighted scoring, suggestion engine
     report.py          # Rich terminal output + markdown/JSON formatting
     data.py            # MOESM3_ESM.xlsx loader, per-codon TE weight computation
+    utils.py           # Shared utilities (reverse_complement)
   optimization/        # pymoo NSGA-III multi-objective optimizer
-    problem.py         # SequenceProblem: 6 objectives = 1 - normalised metric score each
+    problem.py         # SequenceProblem: 5 objectives = 1 - normalised metric score each
     operators.py       # NucleotideSampling, NucleotideMutation (random, not protein-preserving)
     algorithm.py       # NSGA-III setup and run()
   three_prime/         # 3'UTR generation (miRNA database, cell-type seed maps)
@@ -50,16 +51,15 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 
 ### Fitness scoring
 
-6 metrics, weighted sum, all normalised to 0-1:
+5 metrics, weighted sum, all normalised to 0-1:
 
 | Metric | Weight | GREEN threshold | What it measures |
 |---|---|---|---|
-| codon_quality | 15% | CAI >= 0.8 | Human codon adaptation |
-| gc_content | 10% | CDS 40-60% | Nucleotide composition balance |
-| mir122_detargeting | 25% | 3+ sites in 3'UTR | Liver-specific silencing |
-| utr5_accessibility | 10% | MFE < -30 kcal/mol | 5'UTR structure stability |
-| manufacturability | 15% | 0 violations | DNA synthesis feasibility |
-| stability | 25% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt, AREs) |
+| codon_quality | 20% | CAI >= 0.8 | Human codon adaptation |
+| gc_content | 15% | CDS 40-60% | Nucleotide composition balance |
+| utr5_accessibility | 15% | MFE < -30 kcal/mol | 5'UTR structure stability |
+| manufacturability | 20% | 0 violations | DNA synthesis feasibility |
+| stability | 30% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt, AREs) |
 
 ### Tests
 
@@ -74,7 +74,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Mocking rules:**
 - Mock `score_parsed` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
 - Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
-- The mock report dict must include all 6 top-level keys: `sequence_info`, `codon_scores`, `mirna_scores`, `structure_scores`, `manufacturing_scores`, `stability_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
+- The mock report dict must include all 5 top-level keys: `sequence_info`, `codon_scores`, `structure_scores`, `manufacturing_scores`, `stability_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
 
 **Test structure:**
 - `tests/test_cli.py` — CLI integration tests (invoke via CliRunner, mock scoring pipeline)
@@ -85,7 +85,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Writing new tests:**
 - Evaluation metric tests need ViennaRNA installed (structure.py, stability.py). Mock `RNA.fold` if testing without it.
 - Sequences in tests should use RNA (`AUG`, not `ATG`).
-- The optimizer uses `N_OBJECTIVES = len(METRIC_NAMES)` (currently 6). Never hardcode objective counts — import `N_OBJECTIVES` or `METRIC_NAMES` from `optimization.problem`.
+- The optimizer uses `N_OBJECTIVES = len(METRIC_NAMES)` (currently 5). Never hardcode objective counts — import `N_OBJECTIVES` or `METRIC_NAMES` from `optimization.problem`.
 - Use `pytest-mock`'s `mocker` fixture for patching (already a dev dependency).
 
 ## Python API

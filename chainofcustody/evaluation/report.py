@@ -18,7 +18,6 @@ def format_report(report: dict) -> str:
     info = report["sequence_info"]
     summary = report["summary"]
     codons = report["codon_scores"]
-    mirna = report["mirna_scores"]
     structure = report["structure_scores"]
     mfg = report["manufacturing_scores"]
     stab = report.get("stability_scores", {})
@@ -55,20 +54,8 @@ def format_report(report: dict) -> str:
     lines.append(f"- **Rare codon clusters:** {len(clusters)} found")
     lines.append("")
 
-    # miRNA details
-    lines.append("## 2. miRNA Detargeting")
-    for mirna_name, details in mirna.get("detargeting", {}).items():
-        lines.append(f"- **{mirna_name}:** {details['utr3_sites']} sites in 3'UTR "
-                     f"({details['total_sites']} total)")
-        if details.get("inter_site_spacing"):
-            lines.append(f"  - Spacing: {details['inter_site_spacing']}nt")
-            lines.append(f"  - Adequate spacing: {'Yes' if details['adequate_spacing'] else 'No'}")
-    for warning in mirna.get("warnings", []):
-        lines.append(f"- **WARNING:** {warning['message']}")
-    lines.append("")
-
     # Structure details
-    lines.append("## 3. Structure")
+    lines.append("## 2. Structure")
     utr5 = structure.get("utr5_accessibility", {})
     if utr5.get("mfe") is not None:
         lines.append(f"- **5'UTR MFE:** {utr5['mfe']} kcal/mol ({utr5['status']})")
@@ -82,7 +69,7 @@ def format_report(report: dict) -> str:
     lines.append("")
 
     # Manufacturing details
-    lines.append("## 4. Manufacturability")
+    lines.append("## 3. Manufacturability")
     lines.append(f"- **Overall:** {'PASS' if mfg['overall_pass'] else 'FAIL'} "
                  f"({mfg['total_violations']} violations)")
     gc_v = mfg["gc_windows"]
@@ -98,7 +85,7 @@ def format_report(report: dict) -> str:
 
     # Stability details
     if stab:
-        lines.append("## 5. Stability")
+        lines.append("## 4. Stability")
         lines.append(f"- **GC3 (wobble position):** {stab.get('gc3', 0):.1%}")
         lines.append(f"- **MFE per nt:** {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
         lines.append(f"- **AU-rich elements:** {stab.get('au_rich_elements', 0)} in 3'UTR")
@@ -137,7 +124,6 @@ def _metric_label(metric: str) -> str:
     labels = {
         "codon_quality": "Codon quality",
         "gc_content": "GC content",
-        "mir122_detargeting": "miR-122 detargeting",
         "utr5_accessibility": "5'UTR accessibility",
         "manufacturability": "Manufacturability",
         "stability": "Stability",
@@ -157,9 +143,6 @@ def _metric_hint(metric: str, report: dict) -> str:
         return f"CAI {report['codon_scores']['cai']}"
     if metric == "gc_content":
         return f"CDS {report['codon_scores']['gc_content']['cds']}%"
-    if metric == "mir122_detargeting":
-        sites = report["mirna_scores"]["detargeting"].get("miR-122-5p", {}).get("utr3_sites", 0)
-        return f"{sites} site{'s' if sites != 1 else ''} in 3'UTR"
     if metric == "utr5_accessibility":
         return "< -30 for green"
     if metric == "manufacturability":
@@ -176,7 +159,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     info = report["sequence_info"]
     summary = report["summary"]
     codons = report["codon_scores"]
-    mirna = report["mirna_scores"]
     structure = report["structure_scores"]
     mfg = report["manufacturing_scores"]
     fitness = compute_fitness(report)
@@ -241,24 +223,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
         clusters = codons.get("rare_codon_clusters", [])
         if clusters:
             console.print(f"  Rare codon clusters  {len(clusters)} found", style="yellow")
-        console.print()
-
-    # miRNA detail
-    mir122 = mirna.get("detargeting", {}).get("miR-122-5p", {})
-    warnings = mirna.get("warnings", [])
-    if summary.get("mir122_detargeting") != "GREEN" or warnings:
-        has_details = True
-        console.print(Rule("miRNA Detargeting", style="dim"))
-        utr3 = mir122.get("utr3_sites", 0)
-        total = mir122.get("total_sites", 0)
-        console.print(f"  miR-122-5p  {utr3} site{'s' if utr3 != 1 else ''} in 3'UTR ({total} total)")
-        if mir122.get("inter_site_spacing"):
-            spacing = mir122["inter_site_spacing"]
-            adequate = mir122.get("adequate_spacing", False)
-            style = "" if adequate else "yellow"
-            console.print(f"  Spacing  {spacing}nt  {'adequate' if adequate else 'too close'}", style=style)
-        for w in warnings:
-            console.print(f"  {w['mirna']}  {w['sites_found']} accidental site{'s' if w['sites_found'] != 1 else ''}", style="red")
         console.print()
 
     # Structure detail
@@ -348,7 +312,6 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
     table.add_column("Candidate")
     table.add_column("Codon", justify="right")
     table.add_column("GC", justify="right")
-    table.add_column("miR-122", justify="right")
     table.add_column("5'UTR", justify="center")
     table.add_column("Mfg", justify="right")
     table.add_column("Stab", justify="right")
@@ -373,7 +336,6 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
             r["label"],
             _score_cell(scores["codon_quality"]["value"], summary["codon_quality"]),
             _score_cell(scores["gc_content"]["value"], summary["gc_content"]),
-            _score_cell(scores["mir122_detargeting"]["value"], summary["mir122_detargeting"]),
             utr5_text,
             _score_cell(scores["manufacturability"]["value"], summary["manufacturability"]),
             _score_cell(scores["stability"]["value"], summary.get("stability", "GREY")),
@@ -392,13 +354,12 @@ def _print_score_legend(console: Console) -> None:
     legend.add_column("Target / Interpretation", style="dim")
 
     rows = [
-        ("CAI",     "codon_quality",      "0→1; >0.8 ideal (human codon usage)"),
-        ("GC",      "gc_content",         "CDS GC%; 40–60% optimal for stability & synthesis"),
-        ("miR-122", "mir122_detargeting",  "# CACTCC seed sites in 3'UTR; ≥3 for liver detargeting"),
-        ("5'UTR",   "utr5_accessibility",  "MFE kcal/mol; > −20 means accessible cap for translation"),
-        ("Mfg",     "manufacturability",   "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
-        ("Stab",    "stability",           "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
-        ("Score",   None,                  "weighted sum of all metrics above"),
+        ("CAI",    "codon_quality",     "0→1; >0.8 ideal (human codon usage)"),
+        ("GC",     "gc_content",        "CDS GC%; 40–60% optimal for stability & synthesis"),
+        ("5'UTR",  "utr5_accessibility", "MFE kcal/mol; > −20 means accessible cap for translation"),
+        ("Mfg",    "manufacturability",  "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
+        ("Stab",   "stability",          "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("Score",  None,                 "weighted sum of all metrics above"),
     ]
 
     for label, key, description in rows:
