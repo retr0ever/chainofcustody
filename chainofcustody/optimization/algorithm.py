@@ -60,7 +60,8 @@ def _build_history(result, cds: str, utr3: str) -> list[dict]:
         if X is None or F is None:
             continue
         for x_row, f_row in zip(X, F):
-            utr5 = "".join(NUCLEOTIDES[x_row])
+            utr5_len = int(x_row[0])
+            utr5 = "".join(NUCLEOTIDES[x_row[1:utr5_len + 1]])
             seq = utr5 + cds + utr3
             scores = {m: round(1.0 - float(f_val), 4) for m, f_val in zip(METRIC_NAMES, f_row)}
             overall = round(sum(scores[m] * DEFAULT_WEIGHTS.get(m, 0) for m in METRIC_NAMES), 4)
@@ -69,7 +70,8 @@ def _build_history(result, cds: str, utr3: str) -> list[dict]:
 
 
 def run(
-    utr5_len: int = 62,
+    utr5_min: int = 10,
+    utr5_max: int = 100,
     cds: str = "",
     utr3: str = "",
     pop_size: int = 128,
@@ -83,13 +85,14 @@ def run(
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
-    The genetic algorithm evolves only the 5'UTR region. The CDS and 3'UTR are
+    The genetic algorithm evolves the 5'UTR region — both its sequence and its
+    length (which varies between utr5_min and utr5_max). The CDS and 3'UTR are
     fixed and concatenated to the evolved 5'UTR before each evaluation.
 
     Args:
-        utr5_len: Length of the 5'UTR region to evolve.
-        cds: Fixed CDS sequence (RNA, uppercase). Obtained from Ensembl via
-            ``get_canonical_cds`` and converted to RNA before passing in.
+        utr5_min: Minimum allowed 5'UTR length.
+        utr5_max: Maximum allowed 5'UTR length.
+        cds: Fixed CDS sequence (RNA, uppercase).
         utr3: Fixed 3'UTR sequence (RNA, uppercase).
         pop_size: Population size.
         n_gen: Number of generations to evolve.
@@ -104,8 +107,8 @@ def run(
 
     Returns:
         A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
-        Pareto-front 5'UTR population, ``F`` are the corresponding objective
-        values, and ``history`` is a list of per-generation population records
+        Pareto-front population, ``F`` are the corresponding objective values,
+        and ``history`` is a list of per-generation population records
         (full assembled sequences) suitable for CSV export.
     """
     workers = n_workers if n_workers is not None else _DEFAULT_WORKERS
@@ -123,12 +126,12 @@ def run(
         minimize_kwargs["callback"] = _ProgressCallback(progress, progress_task)
 
     if workers == 1:
-        problem = SequenceProblem(utr5_len=utr5_len, cds=cds, utr3=utr3)
+        problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
         result = minimize(problem, algorithm, **minimize_kwargs)
     else:
         with Pool(workers) as pool:
             runner = StarmapParallelization(pool.starmap)
-            problem = SequenceProblem(utr5_len=utr5_len, cds=cds, utr3=utr3, elementwise_runner=runner)
+            problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3, elementwise_runner=runner)
             result = minimize(problem, algorithm, **minimize_kwargs)
 
     return result.X, result.F, _build_history(result, cds, utr3)

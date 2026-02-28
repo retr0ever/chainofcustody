@@ -33,7 +33,8 @@ def _to_rna(seq: str) -> str:
 
 @click.command()
 @click.option("--gene", default="POU5F1", show_default=True, help="HGNC gene symbol whose canonical CDS to optimise (e.g. TP53).")
-@click.option("--utr5-len", type=int, default=len(UTR_SEED), show_default=True, help="Length of the 5'UTR region evolved by the genetic algorithm.")
+@click.option("--utr5-min", type=int, default=10, show_default=True, help="Minimum 5'UTR length the GA can produce.")
+@click.option("--utr5-max", type=int, default=100, show_default=True, help="Maximum 5'UTR length the GA can produce.")
 @click.option("--pop-size", type=int, default=128, show_default=True, help="Population size (must be ≥ number of reference directions; default covers Das-Dennis n_partitions=4 → 126 directions).")
 @click.option("--n-gen", type=int, default=50, show_default=True, help="Number of generations.")
 @click.option("--mutation-rate", type=float, default=0.01, show_default=True, help="Per-position mutation probability.")
@@ -41,8 +42,12 @@ def _to_rna(seq: str) -> str:
 @click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
 @click.option("--csv", "csv_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write Pareto-front results to a CSV file.")
-def main(gene: str, utr5_len: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
+def main(gene: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
     """Run NSGA3 to evolve an optimal 5'UTR for a given gene."""
+    if utr5_min > utr5_max:
+        console.print(f"[bold red]Error:[/bold red] --utr5-min ({utr5_min}) must be ≤ --utr5-max ({utr5_max}).")
+        raise SystemExit(1)
+
     console.print(f"\nResolving canonical CDS for gene [bold]{gene}[/bold]…")
     try:
         cds = _to_rna(get_canonical_cds(gene))
@@ -53,7 +58,7 @@ def main(gene: str, utr5_len: int, pop_size: int, n_gen: int, mutation_rate: flo
     console.print(
         f"CDS resolved: [bold]{len(cds)} nt[/bold]  "
         f"3'UTR: [bold]{len(_UTR3)} nt[/bold]  "
-        f"5'UTR (evolved): [bold]{utr5_len} nt[/bold]\n"
+        f"5'UTR length: [bold]{utr5_min}–{utr5_max} nt[/bold] (evolved)\n"
     )
     console.print(
         f"Running NSGA3 — "
@@ -75,17 +80,18 @@ def main(gene: str, utr5_len: int, pop_size: int, n_gen: int, mutation_rate: flo
     ) as progress:
         task = progress.add_task("5'UTR", total=n_gen)
         X, F, history = run(
-            utr5_len=utr5_len, cds=cds, utr3=_UTR3,
+            utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=_UTR3,
             pop_size=pop_size, n_gen=n_gen,
             mutation_rate=mutation_rate, seed=seed, n_workers=workers,
             progress=progress, progress_task=task,
         )
 
-    problem = SequenceProblem(utr5_len=utr5_len, cds=cds, utr3=_UTR3)
+    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=_UTR3)
     sequences = problem.decode(X)
 
     results = []
     for i, seq in enumerate(sequences):
+        utr5_len = int(X[i][0])
         try:
             report = score_sequence(seq, utr5_end=utr5_len, cds_end=utr5_len + len(cds))
             fitness = compute_fitness(report)

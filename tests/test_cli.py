@@ -6,6 +6,8 @@ from chainofcustody.cli import main
 _GENE = "TP53"
 _CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
 _UTR3 = "GAGTAGUCCC"
+_UTR5_MIN = 4
+_UTR5_MAX = 10
 
 
 @pytest.fixture
@@ -30,8 +32,10 @@ def mock_optimize_run(mocker):
         {"generation": g, "sequence": "ACGU" + _CDS + _UTR3, **{m: 0.8 for m in METRIC_NAMES}, "overall": 0.8}
         for g in range(1, 4)
     ]
+    # Column 0 = length (4), columns 1..10 = nucleotides
+    X_row = np.array([_UTR5_MIN] + [0, 1, 2, 3] + [0] * (_UTR5_MAX - _UTR5_MIN))
     mock.return_value = (
-        np.array([[0, 1, 2, 3]] * 3),
+        np.array([X_row] * 3),
         np.array([[0.3] * N_OBJECTIVES] * 3),
         mock_history,
     )
@@ -67,13 +71,18 @@ def test_help(runner):
 
 
 def test_summary_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
-    result = runner.invoke(main, ["--gene", _GENE, "--utr5-len", "4", "--pop-size", "10", "--n-gen", "2"])
+    result = runner.invoke(main, [
+        "--gene", _GENE,
+        "--utr5-min", str(_UTR5_MIN), "--utr5-max", str(_UTR5_MAX),
+        "--pop-size", "10", "--n-gen", "2",
+    ])
 
     assert result.exit_code == 0, result.output
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
     _, kwargs = mock_optimize_run.call_args
-    assert {k: kwargs[k] for k in ("utr5_len", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
-        "utr5_len": 4, "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
+    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
+        "utr5_min": _UTR5_MIN, "utr5_max": _UTR5_MAX,
+        "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
     }
 
 
@@ -107,7 +116,7 @@ def test_workers_is_passed(runner, mock_get_cds, mock_optimize_run, mock_scoring
 
 def test_csv_output(runner, mock_get_cds, mock_optimize_run, mock_scoring, tmp_path):
     csv_file = tmp_path / "history.csv"
-    result = runner.invoke(main, ["--gene", _GENE, "--utr5-len", "4", "--csv", str(csv_file)])
+    result = runner.invoke(main, ["--gene", _GENE, "--csv", str(csv_file)])
 
     assert result.exit_code == 0
     assert csv_file.exists()
@@ -123,6 +132,13 @@ def test_gene_not_found(runner, mocker):
     from chainofcustody.initial import GeneNotFoundError
     mocker.patch("chainofcustody.cli.get_canonical_cds", side_effect=GeneNotFoundError("BADGENE not found"))
     result = runner.invoke(main, ["--gene", "BADGENE"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_utr5_min_gt_max_rejected(runner, mock_get_cds):
+    result = runner.invoke(main, ["--gene", _GENE, "--utr5-min", "50", "--utr5-max", "10"])
 
     assert result.exit_code == 1
     assert "Error" in result.output

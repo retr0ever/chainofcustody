@@ -23,41 +23,55 @@ N_OBJECTIVES = len(METRIC_NAMES)
 class SequenceProblem(ElementwiseProblem):
     """Multi-objective sequence optimisation problem.
 
-    Only the 5'UTR is evolved; the CDS and 3'UTR are fixed at construction time.
-    Decision variables are nucleotide positions in the 5'UTR encoded as integers
-    0–3 (A/C/G/U). The full sequence evaluated by the scorer is:
+    Only the 5'UTR is evolved; its length is also a decision variable. The CDS
+    and 3'UTR are fixed at construction time. The full evaluated sequence is:
 
-        5'UTR (evolved)  +  CDS (fixed)  +  3'UTR (fixed)
+        5'UTR (evolved, variable length)  +  CDS (fixed)  +  3'UTR (fixed)
 
-    Objectives: minimise (1 - metric_score) for each of the 6 evaluation metrics.
-    Lower = better (pymoo minimises).
+    Chromosome layout (n_var = utr5_max + 1):
+        x[0]          — 5'UTR length  ∈ [utr5_min, utr5_max]
+        x[1 : x[0]+1] — active 5'UTR nucleotides (0=A, 1=C, 2=G, 3=U)
+        x[x[0]+1 :]   — inactive padding (ignored during evaluation)
+
+    Objectives: minimise (1 - metric_score) for each of the 6 evaluation
+    metrics. Lower = better (pymoo minimises).
 
     Inherits from ElementwiseProblem so that individual solutions are dispatched
     one-at-a-time, enabling transparent parallelisation via an elementwise_runner
     (e.g. StarmapParallelization backed by a process or thread pool).
     """
 
-    def __init__(self, utr5_len: int, cds: str, utr3: str, **kwargs) -> None:
+    def __init__(self, utr5_min: int, utr5_max: int, cds: str, utr3: str, **kwargs) -> None:
+        if utr5_min < 0 or utr5_max < utr5_min:
+            raise ValueError(f"utr5_min/utr5_max must satisfy 0 ≤ utr5_min ≤ utr5_max, got {utr5_min}/{utr5_max}")
+        self.utr5_min = utr5_min
+        self.utr5_max = utr5_max
         self.cds = cds
         self.utr3 = utr3
+
+        # Variable 0 encodes length; variables 1..utr5_max encode nucleotides.
+        xl = np.array([utr5_min] + [0] * utr5_max)
+        xu = np.array([utr5_max] + [N_NUCLEOTIDES - 1] * utr5_max)
+
         super().__init__(
-            n_var=utr5_len,
+            n_var=utr5_max + 1,
             n_obj=N_OBJECTIVES,
-            xl=0,
-            xu=N_NUCLEOTIDES - 1,
+            xl=xl,
+            xu=xu,
             vtype=int,
             **kwargs,
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        """Evaluate a single solution vector ``x`` (the 5'UTR encoding)."""
-        utr5 = "".join(NUCLEOTIDES[x])
+        """Evaluate a single solution vector ``x``."""
+        utr5_len = int(x[0])
+        utr5 = "".join(NUCLEOTIDES[x[1:utr5_len + 1]])
         full_seq = utr5 + self.cds + self.utr3
         try:
             report = score_sequence(
                 full_seq,
-                utr5_end=len(utr5),
-                cds_end=len(utr5) + len(self.cds),
+                utr5_end=utr5_len,
+                cds_end=utr5_len + len(self.cds),
             )
             fitness = compute_fitness(report)
             out["F"] = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
@@ -65,5 +79,10 @@ class SequenceProblem(ElementwiseProblem):
             out["F"] = np.ones(N_OBJECTIVES)
 
     def decode(self, X: np.ndarray) -> list[str]:
-        """Convert integer-encoded 5'UTR rows to full assembled sequences."""
-        return ["".join(NUCLEOTIDES[row]) + self.cds + self.utr3 for row in X]
+        """Convert integer-encoded rows to full assembled sequences."""
+        result = []
+        for row in X:
+            utr5_len = int(row[0])
+            utr5 = "".join(NUCLEOTIDES[row[1:utr5_len + 1]])
+            result.append(utr5 + self.cds + self.utr3)
+        return result
