@@ -97,10 +97,11 @@ def test_summary_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_
     assert result.exit_code == 0, result.output
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
     _, kwargs = mock_optimize_run.call_args
-    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers", "initial_length", "max_length_delta")} == {
+    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers", "initial_length", "max_length_delta", "seed_from_data", "gradient_seed_steps")} == {
         "utr5_min": _UTR5_MIN, "utr5_max": _UTR5_MAX,
         "pop_size": 10, "n_gen": 2, "mutation_rate": 0.05, "seed": None, "n_workers": None,
         "initial_length": 200, "max_length_delta": 50,
+        "seed_from_data": True, "gradient_seed_steps": 0,
     }
 
 
@@ -205,3 +206,35 @@ def test_no_off_target_option(runner):
 
     assert "off-target-cell-type" not in result.output
     assert "off_target_cell_type" not in result.output
+
+
+def test_seed_from_data_default_is_true(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--seed-from-data is enabled by default."""
+    runner.invoke(main, ["--gene", _GENE])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["seed_from_data"] is True
+
+
+def test_no_seed_from_data_flag(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--no-seed-from-data disables MOESM3 warm-start seeding."""
+    runner.invoke(main, ["--gene", _GENE, "--no-seed-from-data"])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["seed_from_data"] is False
+
+
+def test_gradient_seed_steps_default_is_zero(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--gradient-seed-steps defaults to 0 (disabled)."""
+    runner.invoke(main, ["--gene", _GENE])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["gradient_seed_steps"] == 0
+
+
+def test_gradient_seed_steps_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--gradient-seed-steps value is forwarded to run()."""
+    runner.invoke(main, ["--gene", _GENE, "--gradient-seed-steps", "100"])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["gradient_seed_steps"] == 100

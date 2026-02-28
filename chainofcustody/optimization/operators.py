@@ -18,6 +18,21 @@ def _encode(seq: str) -> np.ndarray:
     return np.array([_NUCLEOTIDE_INDEX[nt.upper().replace("T", "U")] for nt in seq])
 
 
+def _encode_to_chromosome(seq: str, utr5_max: int) -> np.ndarray:
+    """Encode a 5'UTR string into a full chromosome row.
+
+    Column 0 holds the length; columns 1..len hold the encoded nucleotides;
+    the remainder is zero-padded.  Sequences longer than *utr5_max* are
+    truncated; shorter sequences are left as-is.
+    """
+    seq = seq[:utr5_max]
+    encoded = _encode(seq)
+    row = np.zeros(utr5_max + 1, dtype=int)
+    row[0] = len(encoded)
+    row[1:len(encoded) + 1] = encoded
+    return row
+
+
 class NucleotideSampling(Sampling):
     """Initialise the population with uniformly random 5'UTR sequences.
 
@@ -29,11 +44,23 @@ class NucleotideSampling(Sampling):
     value (σ = 10% of initial_length) and clamped to [utr5_min, utr5_max].  This
     seeds the population at a sensible starting length while preserving diversity.
     Without *initial_length*, lengths are drawn uniformly across the full range.
+
+    When *seed_sequences* is provided, the first ``min(len(seed_sequences),
+    n_samples)`` individuals are initialised from those sequences (already
+    encoded as chromosome rows or as RNA/DNA strings) and the remainder are
+    filled with random individuals.  This allows warm-starting the population
+    from high-quality candidates such as MOESM3 high-TE sequences or
+    gradient-designed seeds.
     """
 
-    def __init__(self, initial_length: int | None = None) -> None:
+    def __init__(
+        self,
+        initial_length: int | None = None,
+        seed_sequences: list[np.ndarray | str] | None = None,
+    ) -> None:
         super().__init__()
         self.initial_length = initial_length
+        self.seed_sequences = seed_sequences or []
 
     def _do(self, problem, n_samples: int, **kwargs) -> np.ndarray:
         utr5_min = int(problem.xl[0])
@@ -42,15 +69,38 @@ class NucleotideSampling(Sampling):
 
         population = np.zeros((n_samples, n_var), dtype=int)
 
-        if self.initial_length is not None:
-            init_len = int(np.clip(self.initial_length, utr5_min, utr5_max))
-            sigma = max(1, int(init_len * 0.10))
-            lengths = np.round(np.random.normal(init_len, sigma, n_samples)).astype(int)
-            population[:, 0] = np.clip(lengths, utr5_min, utr5_max)
-        else:
-            population[:, 0] = np.random.randint(utr5_min, utr5_max + 1, size=n_samples)
+        # --- Fill from pre-built seeds first ----------------------------------
+        n_seeds = min(len(self.seed_sequences), n_samples)
+        for i, seed in enumerate(self.seed_sequences[:n_seeds]):
+            if isinstance(seed, str):
+                row = _encode_to_chromosome(seed, utr5_max)
+            else:
+                row = np.asarray(seed, dtype=int)
+                if row.shape[0] < n_var:
+                    # Pad shorter rows with zeros
+                    padded = np.zeros(n_var, dtype=int)
+                    padded[:row.shape[0]] = row
+                    row = padded
+                elif row.shape[0] > n_var:
+                    row = row[:n_var]
+            # Clamp length to valid range
+            row[0] = int(np.clip(row[0], utr5_min, utr5_max))
+            population[i] = row
 
-        population[:, 1:] = np.random.randint(0, N_NUCLEOTIDES, size=(n_samples, utr5_max))
+        # --- Fill remaining slots with random individuals ---------------------
+        n_random = n_samples - n_seeds
+        if n_random > 0:
+            rand_pop = np.zeros((n_random, n_var), dtype=int)
+            if self.initial_length is not None:
+                init_len = int(np.clip(self.initial_length, utr5_min, utr5_max))
+                sigma = max(1, int(init_len * 0.10))
+                lengths = np.round(np.random.normal(init_len, sigma, n_random)).astype(int)
+                rand_pop[:, 0] = np.clip(lengths, utr5_min, utr5_max)
+            else:
+                rand_pop[:, 0] = np.random.randint(utr5_min, utr5_max + 1, size=n_random)
+            rand_pop[:, 1:] = np.random.randint(0, N_NUCLEOTIDES, size=(n_random, utr5_max))
+            population[n_seeds:] = rand_pop
+
         return population
 
 

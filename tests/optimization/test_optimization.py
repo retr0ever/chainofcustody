@@ -39,12 +39,16 @@ def mock_ribonn(mocker):
     """Prevent RiboNN from loading GPU models in optimization unit tests."""
     mocker.patch(
         "chainofcustody.evaluation.ribonn.score_ribonn_batch",
-        side_effect=lambda seqs: [_NULL_RIBONN] * len(seqs),
+        side_effect=lambda seqs, target_cell_type="megakaryocytes": [_NULL_RIBONN] * len(seqs),
     )
     mocker.patch(
         "chainofcustody.evaluation.ribonn.score_ribonn",
         return_value=_NULL_RIBONN,
     )
+    # Prevent MOESM3 file I/O in unit tests that call run() by patching the
+    # function object on the module so the lazy import in algorithm.py picks it up.
+    import chainofcustody.optimization.moesm3_seeds as _m
+    mocker.patch.object(_m, "load_top_utr5_seeds", return_value=["AAAA", "CCCC"])
 
 
 def _problem(utr5_min: int = _UTR5_MIN, utr5_max: int = _UTR5_MAX) -> SequenceProblem:
@@ -233,3 +237,81 @@ def test_elitist_archive_is_populated_after_run():
     # Pareto front — a non-empty front confirms elitism ran successfully.
     assert X is not None and len(X) >= 1
     assert F is not None and len(F) >= 1
+
+
+# ── Seed sequences in NucleotideSampling ─────────────────────────────────────
+
+def test_sampling_with_string_seeds():
+    """String seeds are encoded into the first population slots."""
+    problem = _problem(utr5_min=4, utr5_max=20)
+    seeds = ["AAAA", "CCCC", "GGGG"]
+    sampling = NucleotideSampling(seed_sequences=seeds)
+    X = sampling._do(problem, n_samples=10)
+
+    assert X.shape == (10, _UTR5_MAX + 1)
+    # First three rows should encode the seeds
+    assert X[0, 0] == 4  # length of "AAAA"
+    assert list(X[0, 1:5]) == [0, 0, 0, 0]   # A=0
+    assert X[1, 0] == 4
+    assert list(X[1, 1:5]) == [1, 1, 1, 1]   # C=1
+    assert X[2, 0] == 4
+    assert list(X[2, 1:5]) == [2, 2, 2, 2]   # G=2
+
+
+def test_sampling_with_array_seeds():
+    """Pre-built chromosome row arrays are placed into the first population slots."""
+    problem = _problem(utr5_min=4, utr5_max=20)
+    row = np.zeros(_UTR5_MAX + 1, dtype=int)
+    row[0] = 5
+    row[1:6] = [0, 1, 2, 3, 0]  # ACGUA
+    sampling = NucleotideSampling(seed_sequences=[row])
+    X = sampling._do(problem, n_samples=8)
+
+    assert X.shape == (8, _UTR5_MAX + 1)
+    np.testing.assert_array_equal(X[0], row)
+
+
+def test_sampling_seeds_do_not_exceed_population():
+    """More seeds than n_samples: only the first n_samples seeds are used."""
+    problem = _problem(utr5_min=4, utr5_max=20)
+    seeds = ["AAAA"] * 20  # 20 seeds but only 5 individuals
+    sampling = NucleotideSampling(seed_sequences=seeds)
+    X = sampling._do(problem, n_samples=5)
+    assert X.shape == (5, _UTR5_MAX + 1)
+
+
+def test_sampling_seed_length_clamped_to_bounds():
+    """Seeds whose encoded length exceeds utr5_max are truncated and clamped."""
+    problem = _problem(utr5_min=4, utr5_max=10)
+    long_seed = "A" * 50  # longer than utr5_max=10
+    sampling = NucleotideSampling(seed_sequences=[long_seed])
+    X = sampling._do(problem, n_samples=5)
+    assert X[0, 0] <= 10  # length clamped to utr5_max
+
+
+def test_run_with_seed_from_data_disabled(mocker):
+    """run() with seed_from_data=False skips MOESM3 loading."""
+    load_mock = mocker.patch(
+        "chainofcustody.optimization.moesm3_seeds.load_top_utr5_seeds",
+        return_value=["AAAA"],
+    )
+    run(
+        utr5_min=_UTR5_MIN, utr5_max=_UTR5_MAX, cds=_CDS, utr3=_UTR3,
+        pop_size=32, n_gen=2, seed=0, initial_length=10,
+        seed_from_data=False, gradient_seed_steps=0,
+    )
+    load_mock.assert_not_called()
+
+
+def test_run_with_seed_from_data_enabled(mocker):
+    """run() with seed_from_data=True calls load_top_utr5_seeds."""
+    load_mock = mocker.patch(
+        "chainofcustody.optimization.moesm3_seeds.load_top_utr5_seeds",
+        return_value=["AAAA", "CCCC"],
+    )
+    run(
+        utr5_min=_UTR5_MIN, utr5_max=_UTR5_MAX, cds=_CDS, utr3=_UTR3,
+        pop_size=32, n_gen=2, seed=0, initial_length=10,
+        seed_from_data=True, gradient_seed_steps=0,
+    )
+    load_mock.assert_called_once()

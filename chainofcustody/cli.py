@@ -77,10 +77,12 @@ def _to_rna(seq: str) -> str:
 @click.option("--max-length-delta", type=int, default=50, show_default=True, help="Maximum change in 5'UTR length per mutation event.")
 @click.option("--seed", type=int, default=None, help="Random seed for reproducibility.")
 @click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
+@click.option("--seed-from-data/--no-seed-from-data", default=True, show_default=True, help="Warm-start a portion of the initial population with top-TE 5'UTR sequences from the MOESM3 dataset.")
+@click.option("--gradient-seed-steps", type=int, default=0, show_default=True, help="Run this many gradient-ascent steps through RiboNN to design warm-start 5'UTR seeds before NSGA-III (0 = disabled).")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
 @click.option("--csv", "csv_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write Pareto-front results to a CSV file.")
 @click.option("--ribonn-output", "ribonn_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write per-tissue RiboNN predictions for Pareto-front candidates to a CSV file.")
-def main(gene: str, target: str, utr5_min: int, utr5_max: int, utr5_init: int, pop_size: int, n_gen: int, mutation_rate: float, max_length_delta: int, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None, ribonn_path: Path | None) -> None:
+def main(gene: str, target: str, utr5_min: int, utr5_max: int, utr5_init: int, pop_size: int, n_gen: int, mutation_rate: float, max_length_delta: int, seed: int | None, workers: int | None, seed_from_data: bool, gradient_seed_steps: int, output_fmt: str, csv_path: Path | None, ribonn_path: Path | None) -> None:
     """Run NSGA3 to evolve an optimal 5'UTR for a given gene."""
     if utr5_min > utr5_max:
         console.print(f"[bold red]Error:[/bold red] --utr5-min ({utr5_min}) must be <= --utr5-max ({utr5_max}).")
@@ -122,7 +124,9 @@ def main(gene: str, target: str, utr5_min: int, utr5_max: int, utr5_init: int, p
         f"n_gen=[bold]{n_gen}[/bold]  "
         f"mutation_rate=[bold]{mutation_rate}[/bold]  "
         f"max_length_delta=[bold]{max_length_delta}[/bold]  "
-        f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]\n"
+        f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]  "
+        f"seed_from_data=[bold]{seed_from_data}[/bold]  "
+        f"gradient_seed_steps=[bold]{gradient_seed_steps}[/bold]\n"
     )
 
     with Progress(
@@ -159,6 +163,8 @@ def main(gene: str, target: str, utr5_min: int, utr5_max: int, utr5_init: int, p
                 target_cell_type=ribonn_cell_type,
                 initial_length=utr5_init,
                 max_length_delta=max_length_delta,
+                seed_from_data=seed_from_data,
+                gradient_seed_steps=gradient_seed_steps,
             )
         finally:
             set_status_callback(None)

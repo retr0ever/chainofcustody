@@ -59,13 +59,15 @@ def _normalise_te(report: dict) -> float:
     the variance between candidates in a single run.  The metric is therefore
     most useful for **final ranking** rather than as an optimisation gradient.
 
-    Midpoint at 1.2; k=3 → sensitive across 0.5–2.0 (the practically
-    achievable range), with score ~0.5 at TE=1.2, ~0.25 at TE=0.8, ~0.75
-    at TE=1.6.
+    Midpoint at 1.0; k=6 → ~3× more gradient per TE unit compared to the
+    previous (midpoint=1.2, k=3) setting, giving NSGA-III a stronger
+    directional signal in the practically achievable 5'UTR-tuning range
+    (typically 0.8–1.6 TE units).  Score ~0.5 at TE=1.0, ~0.27 at TE=0.8,
+    ~0.73 at TE=1.2, ~0.88 at TE=1.4.
     """
     ribonn = report["ribonn_scores"]
     target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
-    return _sigmoid(target_te, midpoint=1.2, k=3.0)
+    return _sigmoid(target_te, midpoint=1.0, k=6.0)
 
 
 NORMALISERS = {

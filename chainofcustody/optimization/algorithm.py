@@ -96,6 +96,7 @@ def build_algorithm(
     mutation_rate: float = 0.05,
     initial_length: int | None = None,
     max_length_delta: int = 50,
+    seed_sequences: list | None = None,
 ) -> ElitistNSGA3:
     """Construct an ElitistNSGA3 instance for nucleotide sequence optimisation.
 
@@ -104,6 +105,9 @@ def build_algorithm(
         mutation_rate: Per-position probability of a point mutation.
         initial_length: Seed the population around this 5'UTR length (None = uniform).
         max_length_delta: Maximum nt change to the length variable per mutation event.
+        seed_sequences: Optional warm-start sequences (chromosome rows as ``np.ndarray``
+            or RNA/DNA strings).  The first ``min(len(seed_sequences), pop_size)``
+            individuals are seeded from these; the rest are random.
     """
     # n_partitions=3 -> 84 Das-Dennis reference points for 4 objectives,
     # which fits within the default pop_size=128 (NSGA-III requires pop_size >= n_ref_points).
@@ -112,7 +116,10 @@ def build_algorithm(
     return ElitistNSGA3(
         ref_dirs=ref_dirs,
         pop_size=pop_size,
-        sampling=NucleotideSampling(initial_length=initial_length),
+        sampling=NucleotideSampling(
+            initial_length=initial_length,
+            seed_sequences=seed_sequences,
+        ),
         crossover=UniformCrossover(),
         mutation=NucleotideMutation(mutation_rate=mutation_rate, max_length_delta=max_length_delta),
         eliminate_duplicates=True,
@@ -154,6 +161,8 @@ def run(
     target_cell_type: str = "megakaryocytes",
     initial_length: int | None = 200,
     max_length_delta: int = 50,
+    seed_from_data: bool = True,
+    gradient_seed_steps: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     """Run NSGA3 on the sequence optimisation problem.
 
@@ -181,6 +190,10 @@ def run(
         progress_task: Task ID returned by ``progress.add_task``.
         initial_length: Seed population 5'UTR lengths around this value (None = uniform).
         max_length_delta: Maximum nt change to the length variable per mutation event.
+        seed_from_data: If True, warm-start a portion of the population with the
+            top-TE 5'UTR sequences from the MOESM3 dataset.
+        gradient_seed_steps: Number of gradient-ascent steps to run through RiboNN
+            before NSGA-III.  0 disables gradient seeding.
 
     Returns:
         A tuple ``(X, F, history)`` where ``X`` is the integer-encoded
@@ -188,19 +201,52 @@ def run(
         and ``history`` is a list of per-generation population records
         (full assembled sequences) suitable for CSV export.
     """
+    from chainofcustody.progress import update_status  # noqa: PLC0415
+    from chainofcustody.evaluation.ribonn import get_predictor  # noqa: PLC0415
+
+    update_status("loading RiboNN models into GPU…")
+    get_predictor()
+    update_status("models ready")
+
+    # --- Collect warm-start seeds --------------------------------------------
+    seed_sequences: list = []
+
+    if gradient_seed_steps > 0:
+        from chainofcustody.optimization.gradient_seed import generate_gradient_seeds  # noqa: PLC0415
+        n_grad_seeds = max(1, pop_size // 8)
+        update_status(f"gradient seed  ({gradient_seed_steps} steps, {n_grad_seeds} seqs)…")
+        grad_rows = generate_gradient_seeds(
+            cds=cds,
+            utr3=utr3,
+            target_cell_type=target_cell_type,
+            utr5_len=initial_length or 100,
+            n_steps=gradient_seed_steps,
+            n_seeds=n_grad_seeds,
+            utr5_max=utr5_max,
+        )
+        seed_sequences.extend(grad_rows)
+        update_status(f"gradient seed  done ({len(grad_rows)} seqs)")
+
+    if seed_from_data:
+        from chainofcustody.optimization.moesm3_seeds import load_top_utr5_seeds  # noqa: PLC0415
+        n_data_seeds = max(1, pop_size // 8)
+        update_status(f"MOESM3 seeds  loading top {n_data_seeds}…")
+        moesm3_seqs = load_top_utr5_seeds(
+            n=n_data_seeds,
+            max_utr5_len=min(utr5_max, 500),
+            min_utr5_len=utr5_min,
+        )
+        seed_sequences.extend(moesm3_seqs)
+        update_status(f"MOESM3 seeds  loaded {len(moesm3_seqs)} sequences")
+
     algorithm = build_algorithm(
         pop_size=pop_size,
         mutation_rate=mutation_rate,
         initial_length=initial_length,
         max_length_delta=max_length_delta,
+        seed_sequences=seed_sequences if seed_sequences else None,
     )
     problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3, target_cell_type=target_cell_type)
-
-    from chainofcustody.progress import update_status  # noqa: PLC0415
-    update_status("loading RiboNN models into GPU…")
-    from chainofcustody.evaluation.ribonn import get_predictor  # noqa: PLC0415
-    get_predictor()
-    update_status("models ready")
 
     minimize_kwargs = dict(
         termination=("n_gen", n_gen),
