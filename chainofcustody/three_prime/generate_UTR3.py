@@ -72,16 +72,3 @@ def generate_mrna_sponge_utr(mirna_sequences, num_sites=16):
         "single_sites": sponge_sites,
         "full_utr": final_utr
     }
-
-# --- Example Implementation with Two miRNAs ---
-mir122_3p = "AACGCCAUUAUCACACUAAAUA"
-mir21_5p = "UAGCUUAUCAGACUGAUGUUGA"
-
-# Pass them as a list
-my_mirnas = [mir122_3p, mir21_5p]
-sponge_data = generate_mrna_sponge_utr(my_mirnas, num_sites=16)
-
-print("Site 1 Blueprint (miR-122):", sponge_data["single_sites"][0])
-print("Site 2 Blueprint (miR-21): ", sponge_data["single_sites"][1])
-print("\nFinal Alternating 16-Site 3'UTR:\n")
-print(sponge_data["full_utr"])

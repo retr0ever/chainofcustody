@@ -112,7 +112,7 @@ def score_mirna(parsed: ParsedSequence) -> dict:
 
     Returns dict with:
     - detargeting: miR-122 site details (count, positions, spacing, region breakdown)
-    - warnings: accidental matches for target-tissue miRNAs
+    - warnings: accidental matches for target cell type miRNAs
     """
     result = {"detargeting": {}, "warnings": []}
 
@@ -136,7 +136,7 @@ def score_mirna(parsed: ParsedSequence) -> dict:
             "adequate_spacing": all(s >= 8 for s in spacing) if spacing else True,
         }
 
-    # Scan for accidental matches with target-tissue miRNAs
+    # Scan for accidental matches with target cell type miRNAs
     for mirna_name in WARNING_MIRNAS:
         mirna_seq = MIRNA_LIBRARY[mirna_name]
         hits = scan_for_mirna(parsed, mirna_name, mirna_seq)
@@ -146,7 +146,7 @@ def score_mirna(parsed: ParsedSequence) -> dict:
                 "sites_found": len(hits),
                 "positions": [h.position for h in hits],
                 "regions": [h.region for h in hits],
-                "message": f"Accidental {mirna_name} target site(s) detected — may cause unwanted silencing in target tissue",
+                "message": f"Accidental {mirna_name} target site(s) detected — may cause unwanted silencing in target cell type",
             })
 
     return result
