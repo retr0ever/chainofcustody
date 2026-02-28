@@ -1,28 +1,10 @@
 """Normalised fitness scoring and suggestion engine for candidate ranking."""
 
 DEFAULT_WEIGHTS = {
-    "codon_quality": 0.20,
-    "gc_content": 0.15,
-    "utr5_accessibility": 0.15,
-    "manufacturability": 0.20,
-    "stability": 0.30,
+    "utr5_accessibility": 0.25,
+    "manufacturability": 0.35,
+    "stability": 0.40,
 }
-
-
-def _normalise_cai(report: dict) -> float:
-    """CAI is already 0-1."""
-    return report["codon_scores"]["cai"]
-
-
-def _normalise_gc(report: dict) -> float:
-    """1.0 if 40-60%, linear falloff to 0 at 20% or 80%."""
-    gc = report["codon_scores"]["gc_content"]["cds"]
-    if 40 <= gc <= 60:
-        return 1.0
-    elif gc < 40:
-        return max(0.0, (gc - 20) / 20)
-    else:
-        return max(0.0, (80 - gc) / 20)
 
 
 def _normalise_utr5(report: dict) -> float:
@@ -49,8 +31,6 @@ def _normalise_stability(report: dict) -> float:
 
 
 NORMALISERS = {
-    "codon_quality": _normalise_cai,
-    "gc_content": _normalise_gc,
     "utr5_accessibility": _normalise_utr5,
     "manufacturability": _normalise_manufacturing,
     "stability": _normalise_stability,
@@ -83,7 +63,6 @@ def compute_fitness(report: dict, weights: dict[str, float] | None = None) -> di
         }
 
     overall = sum(s["weighted"] for s in scores.values())
-
     suggestions = _generate_suggestions(report, scores)
 
     return {
@@ -94,9 +73,9 @@ def compute_fitness(report: dict, weights: dict[str, float] | None = None) -> di
 
 
 def _priority_from_weight(weight: float) -> str:
-    if weight >= 0.20:
+    if weight >= 0.35:
         return "high"
-    elif weight >= 0.15:
+    elif weight >= 0.25:
         return "medium"
     return "low"
 
@@ -104,31 +83,19 @@ def _priority_from_weight(weight: float) -> str:
 def _generate_suggestions(report: dict, scores: dict) -> list[dict]:
     """Generate actionable suggestions for non-GREEN metrics."""
     suggestions = []
-
     for metric, info in scores.items():
         if info["status"] == "GREEN":
             continue
-
         priority = _priority_from_weight(info["weight"])
         action = _suggestion_for(metric, report)
         if action:
             suggestions.append({"metric": metric, "priority": priority, "action": action})
-
-    # Sort by priority: high > medium > low
     order = {"high": 0, "medium": 1, "low": 2}
     suggestions.sort(key=lambda s: order.get(s["priority"], 3))
     return suggestions
 
 
 def _suggestion_for(metric: str, report: dict) -> str | None:
-    if metric == "codon_quality":
-        cai = report["codon_scores"]["cai"]
-        return f"Optimise synonymous codons for higher human CAI (current: {cai:.2f}, target: >0.8)"
-
-    if metric == "gc_content":
-        gc = report["codon_scores"]["gc_content"]["cds"]
-        return f"Adjust GC content in CDS (current: {gc:.1f}%, target: 40-60%)"
-
     if metric == "utr5_accessibility":
         mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
         if mfe is not None:

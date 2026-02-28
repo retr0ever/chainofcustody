@@ -14,8 +14,6 @@ N_NUCLEOTIDES = len(NUCLEOTIDES)
 
 # One objective per fitness metric + overall
 METRIC_NAMES = [
-    "codon_quality",
-    "gc_content",
     "utr5_accessibility",
     "manufacturability",
     "stability",

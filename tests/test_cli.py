@@ -56,14 +56,13 @@ def mock_scoring(mocker):
     """Mock the evaluation pipeline so optimize tests don't need ViennaRNA etc."""
     mock_report = {
         "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
-        "codon_scores": {"cai": 0.8, "gc_content": {"overall": 50, "cds": 50}, "liver_selectivity": 0.0},
         "structure_scores": {"utr5_accessibility": {"mfe": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
         "manufacturing_scores": {"total_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "au_rich_elements": 0, "stability_score": 0.7, "status": "GREEN"},
-        "summary": {"codon_quality": "GREEN", "gc_content": "GREEN", "utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN"},
+        "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN"},
     }
     mock_fitness = {
-        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["codon_quality", "gc_content", "utr5_accessibility", "manufacturability", "stability"]},
+        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["utr5_accessibility", "manufacturability", "stability"]},
         "overall": 0.8,
         "suggestions": [],
     }

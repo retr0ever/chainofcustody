@@ -17,7 +17,6 @@ def format_report(report: dict) -> str:
     lines = []
     info = report["sequence_info"]
     summary = report["summary"]
-    codons = report["codon_scores"]
     structure = report["structure_scores"]
     mfg = report["manufacturing_scores"]
     stab = report.get("stability_scores", {})
@@ -40,36 +39,18 @@ def format_report(report: dict) -> str:
         lines.append(f"| {label} | {status} |")
     lines.append("")
 
-    # Codon details
-    lines.append("## 1. Codon Quality")
-    lines.append(f"- **CAI:** {codons['cai']}")
-    gc = codons["gc_content"]
-    lines.append(f"- **GC content:** overall {gc['overall']}% | CDS {gc['cds']}%")
-    lines.append(f"- **Liver selectivity score:** {codons['liver_selectivity']}")
-    if "target_selectivity" in codons:
-        lines.append(f"- **Target selectivity score:** {codons['target_selectivity']}")
-    if "selectivity_ratio" in codons:
-        lines.append(f"- **Selectivity ratio (target/liver):** {codons['selectivity_ratio']}")
-    clusters = codons.get("rare_codon_clusters", [])
-    lines.append(f"- **Rare codon clusters:** {len(clusters)} found")
-    lines.append("")
-
     # Structure details
-    lines.append("## 2. Structure")
+    lines.append("## 1. Structure")
     utr5 = structure.get("utr5_accessibility", {})
     if utr5.get("mfe") is not None:
         lines.append(f"- **5'UTR MFE:** {utr5['mfe']} kcal/mol ({utr5['status']})")
     gmfe = structure.get("global_mfe", {})
     lines.append(f"- **Global MFE:** {gmfe.get('mfe', 'N/A')} kcal/mol "
                  f"({gmfe.get('mfe_per_nt', 'N/A')} per nt)")
-    sites = structure.get("mirna_site_accessibility", [])
-    if sites:
-        accessible = sum(1 for s in sites if s["accessible"])
-        lines.append(f"- **miRNA site accessibility:** {accessible}/{len(sites)} sites accessible")
     lines.append("")
 
     # Manufacturing details
-    lines.append("## 3. Manufacturability")
+    lines.append("## 2. Manufacturability")
     lines.append(f"- **Overall:** {'PASS' if mfg['overall_pass'] else 'FAIL'} "
                  f"({mfg['total_violations']} violations)")
     gc_v = mfg["gc_windows"]
@@ -85,7 +66,7 @@ def format_report(report: dict) -> str:
 
     # Stability details
     if stab:
-        lines.append("## 4. Stability")
+        lines.append("## 3. Stability")
         lines.append(f"- **GC3 (wobble position):** {stab.get('gc3', 0):.1%}")
         lines.append(f"- **MFE per nt:** {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
         lines.append(f"- **AU-rich elements:** {stab.get('au_rich_elements', 0)} in 3'UTR")
@@ -112,18 +93,8 @@ def _styled_status(status: str) -> Text:
     return Text(status, style=f"bold {colour}")
 
 
-def _cai_bar(value: float, width: int = 10) -> Text:
-    filled = round(value * width)
-    bar = Text()
-    bar.append("▓" * filled, style="bold green" if value >= 0.8 else "bold yellow" if value >= 0.6 else "bold red")
-    bar.append("░" * (width - filled), style="dim")
-    return bar
-
-
 def _metric_label(metric: str) -> str:
     labels = {
-        "codon_quality": "Codon quality",
-        "gc_content": "GC content",
         "utr5_accessibility": "5'UTR accessibility",
         "manufacturability": "Manufacturability",
         "stability": "Stability",
@@ -139,10 +110,6 @@ def _metric_value(metric: str, report: dict, fitness: dict) -> str:
 
 
 def _metric_hint(metric: str, report: dict) -> str:
-    if metric == "codon_quality":
-        return f"CAI {report['codon_scores']['cai']}"
-    if metric == "gc_content":
-        return f"CDS {report['codon_scores']['gc_content']['cds']}%"
     if metric == "utr5_accessibility":
         return "< -30 for green"
     if metric == "manufacturability":
@@ -158,7 +125,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     """Print a single sequence report using Rich formatting."""
     info = report["sequence_info"]
     summary = report["summary"]
-    codons = report["codon_scores"]
     structure = report["structure_scores"]
     mfg = report["manufacturing_scores"]
     fitness = compute_fitness(report)
@@ -197,34 +163,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     # ── Detail sections (only for non-GREEN metrics)
     has_details = False
 
-    # Codon quality detail
-    if summary.get("codon_quality") != "GREEN" or summary.get("gc_content") != "GREEN":
-        has_details = True
-        console.print(Rule("Codon Quality", style="dim"))
-        cai = codons["cai"]
-        bar = _cai_bar(cai)
-        line = Text("  CAI  ")
-        line.append(f"{cai}  ", style="bold")
-        line.append_text(bar)
-        console.print(line)
-
-        gc = codons["gc_content"]
-        gc_parts = [f"overall {gc['overall']}%", f"CDS {gc['cds']}%"]
-        if gc.get("utr5") is not None:
-            gc_parts.append(f"5'UTR {gc['utr5']}%")
-        if gc.get("utr3") is not None:
-            gc_parts.append(f"3'UTR {gc['utr3']}%")
-        console.print(f"  GC   {'  '.join(gc_parts)}")
-        console.print(f"  Liver selectivity  {codons['liver_selectivity']:+.4f}")
-        if "target_selectivity" in codons:
-            console.print(f"  Target selectivity  {codons['target_selectivity']:+.4f}")
-        if "selectivity_ratio" in codons:
-            console.print(f"  Selectivity ratio  {codons['selectivity_ratio']:+.4f}")
-        clusters = codons.get("rare_codon_clusters", [])
-        if clusters:
-            console.print(f"  Rare codon clusters  {len(clusters)} found", style="yellow")
-        console.print()
-
     # Structure detail
     if summary.get("utr5_accessibility") != "GREEN":
         has_details = True
@@ -235,10 +173,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
             console.print(f"  {utr5.get('message', '')}", style="dim")
         gmfe = structure.get("global_mfe", {})
         console.print(f"  Global MFE  {gmfe.get('mfe', 'N/A')} kcal/mol ({gmfe.get('mfe_per_nt', 'N/A')} per nt)")
-        sites = structure.get("mirna_site_accessibility", [])
-        if sites:
-            accessible = sum(1 for s in sites if s["accessible"])
-            console.print(f"  miRNA site accessibility  {accessible}/{len(sites)} accessible")
         console.print()
 
     # Manufacturing detail
@@ -257,8 +191,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
             console.print("  Homopolymers  pass", style="green")
         rs = mfg["restriction_sites"]
         if not rs["pass"]:
-            enzymes = [v["enzyme"] for v in rs["violations"]]
-            unique = list(dict.fromkeys(enzymes))
             positions = [f"{v['enzyme']}@{v['position']}" for v in rs["violations"]]
             console.print(f"  Restriction sites  {len(rs['violations'])} found ({', '.join(positions)})", style="yellow")
         else:
@@ -310,8 +242,6 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
     table = Table(title="Candidate Ranking", show_header=True, header_style="bold", padding=(0, 1))
     table.add_column("Rank", justify="right", style="bold")
     table.add_column("Candidate")
-    table.add_column("Codon", justify="right")
-    table.add_column("GC", justify="right")
     table.add_column("5'UTR", justify="center")
     table.add_column("Mfg", justify="right")
     table.add_column("Stab", justify="right")
@@ -334,8 +264,6 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
         table.add_row(
             str(i),
             r["label"],
-            _score_cell(scores["codon_quality"]["value"], summary["codon_quality"]),
-            _score_cell(scores["gc_content"]["value"], summary["gc_content"]),
             utr5_text,
             _score_cell(scores["manufacturability"]["value"], summary["manufacturability"]),
             _score_cell(scores["stability"]["value"], summary.get("stability", "GREY")),
@@ -354,12 +282,10 @@ def _print_score_legend(console: Console) -> None:
     legend.add_column("Target / Interpretation", style="dim")
 
     rows = [
-        ("CAI",    "codon_quality",     "0→1; >0.8 ideal (human codon usage)"),
-        ("GC",     "gc_content",        "CDS GC%; 40–60% optimal for stability & synthesis"),
-        ("5'UTR",  "utr5_accessibility", "MFE kcal/mol; > −20 means accessible cap for translation"),
-        ("Mfg",    "manufacturability",  "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
-        ("Stab",   "stability",          "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
-        ("Score",  None,                 "weighted sum of all metrics above"),
+        ("5'UTR", "utr5_accessibility", "MFE kcal/mol; > −20 means accessible cap for translation"),
+        ("Mfg",   "manufacturability",  "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
+        ("Stab",  "stability",          "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("Score", None,                 "weighted sum of all metrics above"),
     ]
 
     for label, key, description in rows:
