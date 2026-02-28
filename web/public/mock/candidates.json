@@ -1,0 +1,1158 @@
+[
+  {
+    "id": "coc-001",
+    "name": "Alpha",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-03T09:14:22Z",
+    "sequence": {
+      "utr5": "AACUCUAGCGUCGGCGCGACAAGUAAAUUAUUUCAUCGGUAU",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 542,
+        "full_length": 545,
+        "cap5_length": 3,
+        "utr5_length": 42,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -3.36,
+          "mfe_per_nt": -0.08,
+          "utr5_length": 42,
+          "fold_window": 42,
+          "status": "GREEN",
+          "message": "5'UTR has low secondary structure; good ribosome accessibility."
+        },
+        "global_mfe": {
+          "mfe": -148.3,
+          "mfe_per_nt": -0.274,
+          "length": 542,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 54
+        },
+        "homopolymers": {
+          "pass": true,
+          "violations": [],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 0,
+        "utr5_violations": 0,
+        "overall_pass": true
+      },
+      "stability_scores": {
+        "gc3": 0.61,
+        "mfe_per_nt": -0.274,
+        "stability_score": 0.78,
+        "status": "GREEN"
+      },
+      "ribonn_scores": {
+        "mean_te": 1.12,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.62,
+        "mean_off_target_te": 0.88,
+        "per_tissue": null,
+        "status": "GREEN",
+        "message": "Strong cell-type specificity for fibroblast; target TE well above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "GREEN",
+        "manufacturability": "GREEN",
+        "stability": "GREEN",
+        "specificity": "GREEN"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.88,
+          "weight": 0.15,
+          "weighted": 0.132,
+          "status": "GREEN"
+        },
+        "manufacturability": {
+          "value": 0.95,
+          "weight": 0.3,
+          "weighted": 0.285,
+          "status": "GREEN"
+        },
+        "stability": {
+          "value": 0.78,
+          "weight": 0.2,
+          "weighted": 0.156,
+          "status": "GREEN"
+        },
+        "specificity": {
+          "value": 0.71,
+          "weight": 0.35,
+          "weighted": 0.2485,
+          "status": "GREEN"
+        }
+      },
+      "overall": 0.8215,
+      "suggestions": []
+    }
+  },
+  {
+    "id": "coc-002",
+    "name": "Beta",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-05T14:32:07Z",
+    "sequence": {
+      "utr5": "GAAGCCUAUAGAAGCGAGACCACGCUCUGCCCGGUAGCUCCGACGUCUGGGGGAUAUCCUCCCAAGUCUGGC",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 572,
+        "full_length": 575,
+        "cap5_length": 3,
+        "utr5_length": 72,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -15.84,
+          "mfe_per_nt": -0.22,
+          "utr5_length": 72,
+          "fold_window": 72,
+          "status": "AMBER",
+          "message": "5'UTR shows moderate secondary structure; ribosome scanning may be partially impeded."
+        },
+        "global_mfe": {
+          "mfe": -157.2,
+          "mfe_per_nt": -0.275,
+          "length": 572,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 57
+        },
+        "homopolymers": {
+          "pass": true,
+          "violations": [],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 0,
+        "utr5_violations": 0,
+        "overall_pass": true
+      },
+      "stability_scores": {
+        "gc3": 0.58,
+        "mfe_per_nt": -0.275,
+        "stability_score": 0.74,
+        "status": "GREEN"
+      },
+      "ribonn_scores": {
+        "mean_te": 1.08,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.54,
+        "mean_off_target_te": 0.85,
+        "per_tissue": null,
+        "status": "GREEN",
+        "message": "Good cell-type specificity for fibroblast; target TE above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "AMBER",
+        "manufacturability": "GREEN",
+        "stability": "GREEN",
+        "specificity": "GREEN"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.58,
+          "weight": 0.15,
+          "weighted": 0.087,
+          "status": "AMBER"
+        },
+        "manufacturability": {
+          "value": 0.92,
+          "weight": 0.3,
+          "weighted": 0.276,
+          "status": "GREEN"
+        },
+        "stability": {
+          "value": 0.74,
+          "weight": 0.2,
+          "weighted": 0.148,
+          "status": "GREEN"
+        },
+        "specificity": {
+          "value": 0.72,
+          "weight": 0.35,
+          "weighted": 0.252,
+          "status": "GREEN"
+        }
+      },
+      "overall": 0.763,
+      "suggestions": [
+        {
+          "metric": "utr5_accessibility",
+          "priority": "medium",
+          "action": "Consider trimming the 5'UTR or removing GC-rich stems to reduce secondary structure and improve ribosome loading."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-003",
+    "name": "Gamma",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-08T11:05:43Z",
+    "sequence": {
+      "utr5": "GCGGCGGGUAUGAUUUCGGAUGUGUGAUGAAGUCAAGCC",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 539,
+        "full_length": 542,
+        "cap5_length": 3,
+        "utr5_length": 39,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -3.51,
+          "mfe_per_nt": -0.09,
+          "utr5_length": 39,
+          "fold_window": 39,
+          "status": "GREEN",
+          "message": "5'UTR has low secondary structure; good ribosome accessibility."
+        },
+        "global_mfe": {
+          "mfe": -146.4,
+          "mfe_per_nt": -0.272,
+          "length": 539,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 112,
+              "gc_content": 0.78,
+              "issue": "GC content exceeds 70% in 50nt window"
+            }
+          ],
+          "windows_checked": 53
+        },
+        "homopolymers": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 205,
+              "nucleotide": "C",
+              "length": 9,
+              "sequence": "CCCCCCCCC"
+            }
+          ],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": false,
+          "count": 1,
+          "positions": [
+            14
+          ],
+          "violations": [
+            {
+              "position": 14,
+              "sequence": "AUGAAGUCAAGCC"
+            }
+          ]
+        },
+        "total_violations": 3,
+        "utr5_violations": 1,
+        "overall_pass": false
+      },
+      "stability_scores": {
+        "gc3": 0.55,
+        "mfe_per_nt": -0.272,
+        "stability_score": 0.7,
+        "status": "GREEN"
+      },
+      "ribonn_scores": {
+        "mean_te": 1.05,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.48,
+        "mean_off_target_te": 0.82,
+        "per_tissue": null,
+        "status": "GREEN",
+        "message": "Good cell-type specificity for fibroblast; target TE above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "GREEN",
+        "manufacturability": "RED",
+        "stability": "GREEN",
+        "specificity": "GREEN"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.88,
+          "weight": 0.15,
+          "weighted": 0.132,
+          "status": "GREEN"
+        },
+        "manufacturability": {
+          "value": 0.38,
+          "weight": 0.3,
+          "weighted": 0.114,
+          "status": "RED"
+        },
+        "stability": {
+          "value": 0.7,
+          "weight": 0.2,
+          "weighted": 0.14,
+          "status": "GREEN"
+        },
+        "specificity": {
+          "value": 0.82,
+          "weight": 0.35,
+          "weighted": 0.287,
+          "status": "GREEN"
+        }
+      },
+      "overall": 0.673,
+      "suggestions": [
+        {
+          "metric": "manufacturability",
+          "priority": "high",
+          "action": "Remove the upstream ORF at position 14 and break the C9 homopolymer run at position 205 by introducing synonymous codon substitutions."
+        },
+        {
+          "metric": "manufacturability",
+          "priority": "high",
+          "action": "Reduce GC content in the high-GC window near position 112 by selecting AU-rich synonymous codons."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-004",
+    "name": "Delta",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-11T16:48:19Z",
+    "sequence": {
+      "utr5": "CGUAGCAACCAAUUGAUACUCCCGCGAAUUGAUUUAUACCCGAUGGCAUGUCAUUGUAAUGGCACGCGCCAACGGAAUAG",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 580,
+        "full_length": 583,
+        "cap5_length": 3,
+        "utr5_length": 80,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -30.4,
+          "mfe_per_nt": -0.38,
+          "utr5_length": 80,
+          "fold_window": 80,
+          "status": "RED",
+          "message": "5'UTR has extensive secondary structure; ribosome scanning is likely severely impeded."
+        },
+        "global_mfe": {
+          "mfe": -168.4,
+          "mfe_per_nt": -0.29,
+          "length": 580,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 58
+        },
+        "homopolymers": {
+          "pass": true,
+          "violations": [],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 0,
+        "utr5_violations": 0,
+        "overall_pass": true
+      },
+      "stability_scores": {
+        "gc3": 0.48,
+        "mfe_per_nt": -0.29,
+        "stability_score": 0.48,
+        "status": "AMBER"
+      },
+      "ribonn_scores": {
+        "mean_te": 1.1,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.51,
+        "mean_off_target_te": 0.86,
+        "per_tissue": null,
+        "status": "GREEN",
+        "message": "Good cell-type specificity for fibroblast; target TE above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "RED",
+        "manufacturability": "GREEN",
+        "stability": "AMBER",
+        "specificity": "GREEN"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.3,
+          "weight": 0.15,
+          "weighted": 0.045,
+          "status": "RED"
+        },
+        "manufacturability": {
+          "value": 0.75,
+          "weight": 0.3,
+          "weighted": 0.225,
+          "status": "GREEN"
+        },
+        "stability": {
+          "value": 0.48,
+          "weight": 0.2,
+          "weighted": 0.096,
+          "status": "AMBER"
+        },
+        "specificity": {
+          "value": 0.71,
+          "weight": 0.35,
+          "weighted": 0.2485,
+          "status": "GREEN"
+        }
+      },
+      "overall": 0.6145,
+      "suggestions": [
+        {
+          "metric": "utr5_accessibility",
+          "priority": "high",
+          "action": "Consider a shorter 5'UTR to reduce secondary structure; the current 80nt UTR has excessive GC-rich stem-loops impeding ribosome scanning."
+        },
+        {
+          "metric": "stability",
+          "priority": "medium",
+          "action": "Increase GC3 codon usage from 0.48 to improve mRNA folding stability and half-life."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-005",
+    "name": "Epsilon",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-14T08:22:55Z",
+    "sequence": {
+      "utr5": "AUCCGUCCACGCGGAUGCCGCACAGGGACACCAUGCCAUGUGCCAAUUGACAUACAUCGGCCC",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 563,
+        "full_length": 566,
+        "cap5_length": 3,
+        "utr5_length": 63,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -12.6,
+          "mfe_per_nt": -0.2,
+          "utr5_length": 63,
+          "fold_window": 63,
+          "status": "AMBER",
+          "message": "5'UTR shows moderate secondary structure; ribosome scanning may be partially impeded."
+        },
+        "global_mfe": {
+          "mfe": -152.9,
+          "mfe_per_nt": -0.272,
+          "length": 563,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 56
+        },
+        "homopolymers": {
+          "pass": true,
+          "violations": [],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 0,
+        "utr5_violations": 0,
+        "overall_pass": true
+      },
+      "stability_scores": {
+        "gc3": 0.46,
+        "mfe_per_nt": -0.272,
+        "stability_score": 0.5,
+        "status": "AMBER"
+      },
+      "ribonn_scores": {
+        "mean_te": 0.95,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.18,
+        "mean_off_target_te": 0.84,
+        "per_tissue": null,
+        "status": "AMBER",
+        "message": "Moderate cell-type specificity for fibroblast; target TE only slightly above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "AMBER",
+        "manufacturability": "GREEN",
+        "stability": "AMBER",
+        "specificity": "AMBER"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.55,
+          "weight": 0.15,
+          "weighted": 0.0825,
+          "status": "AMBER"
+        },
+        "manufacturability": {
+          "value": 0.78,
+          "weight": 0.3,
+          "weighted": 0.234,
+          "status": "GREEN"
+        },
+        "stability": {
+          "value": 0.5,
+          "weight": 0.2,
+          "weighted": 0.1,
+          "status": "AMBER"
+        },
+        "specificity": {
+          "value": 0.45,
+          "weight": 0.35,
+          "weighted": 0.1575,
+          "status": "AMBER"
+        }
+      },
+      "overall": 0.574,
+      "suggestions": [
+        {
+          "metric": "utr5_accessibility",
+          "priority": "medium",
+          "action": "Trim the 5'UTR or substitute GC-rich regions with AU-rich motifs to reduce stem-loop formation."
+        },
+        {
+          "metric": "stability",
+          "priority": "medium",
+          "action": "Increase GC3 codon usage to improve mRNA folding stability."
+        },
+        {
+          "metric": "specificity",
+          "priority": "medium",
+          "action": "Consider alternative UTR regulatory elements to enhance fibroblast-specific translation efficiency."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-006",
+    "name": "Zeta",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-17T13:37:11Z",
+    "sequence": {
+      "utr5": "UCUCUUAGCGGAGGCUCCGGCCGUUCUCAGCCCUCAU",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 537,
+        "full_length": 540,
+        "cap5_length": 3,
+        "utr5_length": 37,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -2.96,
+          "mfe_per_nt": -0.08,
+          "utr5_length": 37,
+          "fold_window": 37,
+          "status": "GREEN",
+          "message": "5'UTR has low secondary structure; good ribosome accessibility."
+        },
+        "global_mfe": {
+          "mfe": -145.8,
+          "mfe_per_nt": -0.272,
+          "length": 537,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 53
+        },
+        "homopolymers": {
+          "pass": true,
+          "violations": [],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 0,
+        "utr5_violations": 0,
+        "overall_pass": true
+      },
+      "stability_scores": {
+        "gc3": 0.59,
+        "mfe_per_nt": -0.272,
+        "stability_score": 0.72,
+        "status": "GREEN"
+      },
+      "ribonn_scores": {
+        "mean_te": 0.78,
+        "target_cell_type": "fibroblast",
+        "target_te": 0.72,
+        "mean_off_target_te": 0.81,
+        "per_tissue": null,
+        "status": "RED",
+        "message": "Poor cell-type specificity; fibroblast TE is below off-target mean, indicating no preferential expression."
+      },
+      "summary": {
+        "utr5_accessibility": "GREEN",
+        "manufacturability": "GREEN",
+        "stability": "GREEN",
+        "specificity": "RED"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.75,
+          "weight": 0.15,
+          "weighted": 0.1125,
+          "status": "GREEN"
+        },
+        "manufacturability": {
+          "value": 0.78,
+          "weight": 0.3,
+          "weighted": 0.234,
+          "status": "GREEN"
+        },
+        "stability": {
+          "value": 0.72,
+          "weight": 0.2,
+          "weighted": 0.144,
+          "status": "GREEN"
+        },
+        "specificity": {
+          "value": 0.12,
+          "weight": 0.35,
+          "weighted": 0.042,
+          "status": "RED"
+        }
+      },
+      "overall": 0.5325,
+      "suggestions": [
+        {
+          "metric": "specificity",
+          "priority": "high",
+          "action": "Replace the 5'UTR with fibroblast-enriched regulatory elements; current design shows no preferential translation in the target cell type."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-007",
+    "name": "Eta",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-21T10:15:38Z",
+    "sequence": {
+      "utr5": "GACACAUCUACGGCAGCGCAAUGUACAACUGAAGAGGGCUUCUUUACUCUUCGCGACGUAC",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 561,
+        "full_length": 564,
+        "cap5_length": 3,
+        "utr5_length": 61,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -11.59,
+          "mfe_per_nt": -0.19,
+          "utr5_length": 61,
+          "fold_window": 61,
+          "status": "AMBER",
+          "message": "5'UTR shows moderate secondary structure; ribosome scanning may be partially impeded."
+        },
+        "global_mfe": {
+          "mfe": -155.5,
+          "mfe_per_nt": -0.277,
+          "length": 561,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": true,
+          "violations": [],
+          "windows_checked": 56
+        },
+        "homopolymers": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 178,
+              "nucleotide": "G",
+              "length": 9,
+              "sequence": "GGGGGGGGG"
+            }
+          ],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": true,
+          "violations": [],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": true,
+          "count": 0,
+          "positions": [],
+          "violations": []
+        },
+        "total_violations": 1,
+        "utr5_violations": 0,
+        "overall_pass": false
+      },
+      "stability_scores": {
+        "gc3": 0.34,
+        "mfe_per_nt": -0.277,
+        "stability_score": 0.32,
+        "status": "RED"
+      },
+      "ribonn_scores": {
+        "mean_te": 0.96,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.14,
+        "mean_off_target_te": 0.87,
+        "per_tissue": null,
+        "status": "AMBER",
+        "message": "Moderate cell-type specificity for fibroblast; target TE only slightly above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "AMBER",
+        "manufacturability": "AMBER",
+        "stability": "RED",
+        "specificity": "AMBER"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.52,
+          "weight": 0.15,
+          "weighted": 0.078,
+          "status": "AMBER"
+        },
+        "manufacturability": {
+          "value": 0.58,
+          "weight": 0.3,
+          "weighted": 0.174,
+          "status": "AMBER"
+        },
+        "stability": {
+          "value": 0.32,
+          "weight": 0.2,
+          "weighted": 0.064,
+          "status": "RED"
+        },
+        "specificity": {
+          "value": 0.5,
+          "weight": 0.35,
+          "weighted": 0.175,
+          "status": "AMBER"
+        }
+      },
+      "overall": 0.491,
+      "suggestions": [
+        {
+          "metric": "utr5_accessibility",
+          "priority": "medium",
+          "action": "Trim or redesign the 5'UTR to reduce internal stem-loop structures."
+        },
+        {
+          "metric": "manufacturability",
+          "priority": "medium",
+          "action": "Break the G9 homopolymer run at position 178 using synonymous codon substitutions."
+        },
+        {
+          "metric": "stability",
+          "priority": "high",
+          "action": "Substantially increase GC3 codon usage from 0.34; current level indicates poor mRNA stability and short half-life."
+        },
+        {
+          "metric": "specificity",
+          "priority": "medium",
+          "action": "Explore fibroblast-specific UTR regulatory elements to improve target translation efficiency."
+        }
+      ]
+    }
+  },
+  {
+    "id": "coc-008",
+    "name": "Theta",
+    "gene": "FVIII",
+    "target_cell_type": "Fibroblast",
+    "created_at": "2026-02-25T17:53:02Z",
+    "sequence": {
+      "utr5": "GGCGCGUCCAUCGGGACGAACGUGUUGUAAGCAGUAGGCUUUGGUGCGGACAUUCGACAGACGGCGAUCAGUACGCAU",
+      "cds": "AUGAAGUUUAACAAAUUAUCUCGAUCGGUUGAACAGGGACACAGGUAAUGAUACGCGUGGUGAUUUCCGUGAUAGCGAUGUCCCUGUUGCCGUUCAAAUUCACCCGAAGGAGCUCAGUAGUUGUAGCAAGGUAUAACAUUCUGCUUGCGCCAUUAGAUUAAAUAAGAUGCUUCUCCUAACGCCCAAACGAUUUCUCUGCUACAAAAUUCCCUCAUCACGCGCCUUGUAAGAACUAAUAAUCAUAACGGUGUGCUGCGAACAAUGUGAUGGUCGAGAUGAAUGGUGUGCGAACGAAGUUAA",
+      "utr3": "GUCCAAAUAGUCUAGGAGUUAGCUUUUCAUGCUGUACACUUCGGUUAUCGGAGGCGAAGUGAACGGCACUGACAUGCAGGAGGCGCGUUCCUGCAGGUCGCCCUCUAGGAUGUUUAAUCACCUCCCUUAACUUCAUACUCGCCCUCCGUGCUGCAGUGGGAUUUCUUACCGCCAUCCACCAGGCCUCUGCCACGCUCUAC"
+    },
+    "report": {
+      "sequence_info": {
+        "total_length": 578,
+        "full_length": 581,
+        "cap5_length": 3,
+        "utr5_length": 78,
+        "cds_length": 300,
+        "utr3_length": 200,
+        "num_codons": 100
+      },
+      "structure_scores": {
+        "utr5_accessibility": {
+          "mfe": -35.1,
+          "mfe_per_nt": -0.45,
+          "utr5_length": 78,
+          "fold_window": 78,
+          "status": "RED",
+          "message": "5'UTR has very high secondary structure; ribosome scanning is severely blocked by GC-rich stem-loops."
+        },
+        "global_mfe": {
+          "mfe": -175.1,
+          "mfe_per_nt": -0.303,
+          "length": 578,
+          "method": "full_fold"
+        }
+      },
+      "manufacturing_scores": {
+        "gc_windows": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 5,
+              "gc_content": 0.82,
+              "issue": "GC content exceeds 70% in 50nt window"
+            },
+            {
+              "position": 28,
+              "gc_content": 0.76,
+              "issue": "GC content exceeds 70% in 50nt window"
+            }
+          ],
+          "windows_checked": 57
+        },
+        "homopolymers": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 248,
+              "nucleotide": "U",
+              "length": 9,
+              "sequence": "UUUUUUUUU"
+            }
+          ],
+          "max_allowed": 8
+        },
+        "restriction_sites": {
+          "pass": false,
+          "violations": [
+            {
+              "position": 62,
+              "enzyme": "NotI",
+              "sequence": "GCGGCCGC",
+              "strand": "sense"
+            }
+          ],
+          "enzymes_checked": [
+            "EcoRI",
+            "BamHI",
+            "HindIII",
+            "NotI",
+            "XbaI",
+            "SpeI",
+            "BsaI",
+            "BsmBI"
+          ]
+        },
+        "uorfs": {
+          "pass": false,
+          "count": 2,
+          "positions": [
+            16,
+            51
+          ],
+          "violations": [
+            {
+              "position": 16,
+              "sequence": "AUGCGCGCGGCUAGCGCGCUCGA"
+            },
+            {
+              "position": 51,
+              "sequence": "AUGCGCGCGGAUUCGAUUAGCGCGCUAGCGCGC"
+            }
+          ]
+        },
+        "total_violations": 6,
+        "utr5_violations": 2,
+        "overall_pass": false
+      },
+      "stability_scores": {
+        "gc3": 0.3,
+        "mfe_per_nt": -0.303,
+        "stability_score": 0.28,
+        "status": "RED"
+      },
+      "ribonn_scores": {
+        "mean_te": 0.88,
+        "target_cell_type": "fibroblast",
+        "target_te": 1.02,
+        "mean_off_target_te": 0.82,
+        "per_tissue": null,
+        "status": "AMBER",
+        "message": "Marginal cell-type specificity for fibroblast; target TE barely above off-target mean."
+      },
+      "summary": {
+        "utr5_accessibility": "RED",
+        "manufacturability": "RED",
+        "stability": "RED",
+        "specificity": "AMBER"
+      }
+    },
+    "fitness": {
+      "scores": {
+        "utr5_accessibility": {
+          "value": 0.28,
+          "weight": 0.15,
+          "weighted": 0.042,
+          "status": "RED"
+        },
+        "manufacturability": {
+          "value": 0.24,
+          "weight": 0.3,
+          "weighted": 0.072,
+          "status": "RED"
+        },
+        "stability": {
+          "value": 0.36,
+          "weight": 0.2,
+          "weighted": 0.072,
+          "status": "RED"
+        },
+        "specificity": {
+          "value": 0.56,
+          "weight": 0.35,
+          "weighted": 0.196,
+          "status": "AMBER"
+        }
+      },
+      "overall": 0.382,
+      "suggestions": [
+        {
+          "metric": "utr5_accessibility",
+          "priority": "high",
+          "action": "Completely redesign the 5'UTR; the current 78nt GC-rich sequence forms extensive stem-loops that block ribosome entry."
+        },
+        {
+          "metric": "manufacturability",
+          "priority": "high",
+          "action": "Address 7 manufacturing violations: remove 2 uORFs from the 5'UTR, break the U9 homopolymer, eliminate the NotI restriction site, and reduce GC content in two high-GC windows."
+        },
+        {
+          "metric": "stability",
+          "priority": "high",
+          "action": "Increase GC3 codon usage from 0.30; current codon optimisation is very poor and will result in rapid mRNA degradation."
+        },
+        {
+          "metric": "specificity",
+          "priority": "medium",
+          "action": "Incorporate fibroblast-specific regulatory motifs in the UTRs to boost target cell translation efficiency."
+        }
+      ]
+    }
+  }
+]

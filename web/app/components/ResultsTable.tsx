@@ -18,15 +18,16 @@ export default function ResultsTable({ result, targets }: ResultsTableProps) {
     <div className="flex flex-col gap-4">
       {/* Summary banner */}
       <div
-        className={`rounded-lg px-4 py-3 text-sm flex flex-wrap gap-4 items-center ${
-          success
-            ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-            : "bg-amber-50 border border-amber-200 text-amber-800"
-        }`}
+        className="rounded-lg px-4 py-3 text-sm flex flex-wrap gap-4 items-center border"
+        style={{
+          background: success ? "var(--green-bg)" : "var(--amber-bg)",
+          borderColor: success ? "var(--green)" : "var(--amber)",
+          color: success ? "var(--green)" : "var(--amber)",
+        }}
       >
         <span>
           <span className="font-semibold">{success ? "Full coverage" : "Partial coverage"}</span>
-          {" — "}
+          {" \u2014 "}
           {allOffTargets.length - uncovered.length}/{allOffTargets.length} off-targets covered (
           {coverPct}%)
         </span>
@@ -36,7 +37,7 @@ export default function ResultsTable({ result, targets }: ResultsTableProps) {
         </span>
         {targets.length > 0 && (
           <span>
-            Protecting{" "}
+            Targeting{" "}
             <span className="font-semibold">
               {targets.map((t) => t.replace(/_/g, " ")).join(", ")}
             </span>
@@ -47,7 +48,7 @@ export default function ResultsTable({ result, targets }: ResultsTableProps) {
             <summary className="cursor-pointer font-medium">
               {uncovered.length} uncovered off-target{uncovered.length !== 1 ? "s" : ""}
             </summary>
-            <p className="mt-1 text-xs font-mono">
+            <p className="mt-1 text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
               {uncovered.map((c) => c.replace(/_/g, " ")).join(", ")}
             </p>
           </details>
@@ -56,42 +57,44 @@ export default function ResultsTable({ result, targets }: ResultsTableProps) {
 
       {/* miRNA table */}
       {steps.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b border-zinc-200">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-zinc-500 text-xs">#</th>
-                <th className="px-3 py-2 text-left font-medium text-zinc-500 text-xs">MiRBase ID</th>
-                <th className="px-3 py-2 text-left font-medium text-zinc-500 text-xs">Seed</th>
-                <th className="px-3 py-2 text-right font-medium text-zinc-500 text-xs">
-                  Target RPM (avg)
-                </th>
-                <th className="px-3 py-2 text-right font-medium text-zinc-500 text-xs">
-                  Newly covered
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-zinc-500 text-xs hidden lg:table-cell">
-                  Mature sequence
-                </th>
+        <div
+          className="overflow-x-auto rounded-lg border"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <table className="w-full text-sm" style={{ minWidth: 480 }}>
+            <thead style={{ background: "var(--bg-inset)" }}>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <th className="px-2 sm:px-3 py-2 text-left font-medium text-xs" style={{ color: "var(--text-secondary)" }}>#</th>
+                <th className="px-2 sm:px-3 py-2 text-left font-medium text-xs" style={{ color: "var(--text-secondary)" }}>MiRBase ID</th>
+                <th className="px-2 sm:px-3 py-2 text-left font-medium text-xs hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>Seed</th>
+                <th className="px-2 sm:px-3 py-2 text-right font-medium text-xs" style={{ color: "var(--text-secondary)" }}>Target RPM</th>
+                <th className="px-2 sm:px-3 py-2 text-right font-medium text-xs" style={{ color: "var(--text-secondary)" }}>Covered</th>
+                <th className="px-2 sm:px-3 py-2 text-left font-medium text-xs hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>Mature sequence</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody>
               {steps.map((step, i) => (
-                <tr key={step.mirnaId} className="hover:bg-zinc-50 transition-colors">
-                  <td className="px-3 py-2 text-zinc-400 font-mono text-xs">{i + 1}</td>
-                  <td className="px-3 py-2 font-mono font-medium text-zinc-800 text-xs">
-                    {step.mirnaId}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-zinc-600">{step.seed || "—"}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-zinc-600">
-                    {step.targetRpm.toFixed(1)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <span className="inline-block rounded-full bg-sky-100 text-sky-700 text-xs px-2 py-0.5 font-medium">
+                <tr
+                  key={step.mirnaId}
+                  className="transition-colors"
+                  style={{ borderBottom: "1px solid var(--border)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono text-xs" style={{ color: "var(--text-tertiary)" }}>{i + 1}</td>
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono font-medium text-xs whitespace-nowrap" style={{ color: "var(--text-primary)" }}>{step.mirnaId}</td>
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono text-xs hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>{step.seed || "\u2014"}</td>
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>{step.targetRpm.toFixed(1)}</td>
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 text-right">
+                    <span
+                      className="inline-block rounded-full text-xs px-2 py-0.5 font-medium"
+                      style={{ background: "var(--primary-bg)", color: "var(--primary)" }}
+                    >
                       {step.newlyCovered.length}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-zinc-400 hidden lg:table-cell max-w-xs truncate">
-                    {step.matureSeq || "—"}
+                  <td className="px-2 sm:px-3 py-2.5 sm:py-2 font-mono text-xs hidden lg:table-cell max-w-xs truncate" style={{ color: "var(--text-tertiary)" }}>
+                    {step.matureSeq || "\u2014"}
                   </td>
                 </tr>
               ))}
@@ -99,7 +102,7 @@ export default function ResultsTable({ result, targets }: ResultsTableProps) {
           </table>
         </div>
       ) : (
-        <p className="text-sm text-zinc-400 text-center py-6">
+        <p className="text-sm text-center py-6" style={{ color: "var(--text-tertiary)" }}>
           No miRNAs found — try lowering the silence or coverage thresholds.
         </p>
       )}

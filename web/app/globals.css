@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
+/* ── Light mode (default) ── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Backgrounds */
+  --bg-base: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-raised: #F1F5F9;
+  --bg-hover: #E8EDF3;
+  --bg-inset: #EEF2F7;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-tertiary: #94A3B8;
+  --text-inverse: #F8FAFC;
+
+  /* Borders */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* Brand */
+  --primary: #4A7A94;
+  --primary-hover: #3D6880;
+  --primary-bg: #E8F4FA;
+  --accent: #D4635A;
+  --accent-hover: #C0524A;
+
+  /* Status */
+  --green: #059669;
+  --green-bg: #ECFDF5;
+  --amber: #D97706;
+  --amber-bg: #FFFBEB;
+  --red: #DC2626;
+  --red-bg: #FEF2F2;
+  --grey: #6B7280;
+  --grey-bg: #F3F4F6;
+
+  /* Sequence regions */
+  --seq-utr5: #4A8DAD;
+  --seq-cds: #3D6880;
+  --seq-utr3: #D4635A;
+
+  /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Dark mode ── */
+html.dark {
+  --bg-base: #0C1017;
+  --bg-surface: #131924;
+  --bg-raised: #1A2233;
+  --bg-hover: #212D42;
+  --bg-inset: #0A0E14;
+
+  --text-primary: #E8ECF2;
+  --text-secondary: #8896AB;
+  --text-tertiary: #556378;
+  --text-inverse: #0C1017;
+
+  --border: #1E2A3A;
+  --border-strong: #2A3A50;
+
+  --primary: #5B8FA8;
+  --primary-hover: #4A7A94;
+  --primary-bg: #0D1F2A;
+  --accent: #E8766A;
+  --accent-hover: #D4635A;
+
+  --green: #34D399;
+  --green-bg: #0D2A1F;
+  --amber: #FBBF24;
+  --amber-bg: #2A2210;
+  --red: #F87171;
+  --red-bg: #2A1414;
+  --grey: #6B7280;
+  --grey-bg: #1A1D24;
+
+  --seq-utr5: #8CB4C8;
+  --seq-cds: #5B8FA8;
+  --seq-utr3: #E8766A;
+}
+
+@theme inline {
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+/* Prevent double-tap zoom on interactive elements */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Selection colour */
+::selection {
+  background: rgba(91, 143, 168, 0.3);
+  color: var(--text-primary);
 }

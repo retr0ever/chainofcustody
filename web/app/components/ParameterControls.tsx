@@ -16,8 +16,11 @@ function Slider({ label, hint, value, min, max, step, format, onChange }: Slider
   return (
     <div className="flex flex-col gap-1">
       <div className="flex justify-between items-baseline">
-        <label className="text-xs font-medium text-zinc-600">{label}</label>
-        <span className="text-xs font-mono font-semibold text-zinc-800 bg-zinc-100 rounded px-1.5 py-0.5">
+        <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
+        <span
+          className="text-xs font-mono font-semibold rounded px-1.5 py-0.5"
+          style={{ background: "var(--bg-inset)", color: "var(--text-primary)" }}
+        >
           {display}
         </span>
       </div>
@@ -28,9 +31,10 @@ function Slider({ label, hint, value, min, max, step, format, onChange }: Slider
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-sky-600"
+        className="w-full"
+        style={{ accentColor: "var(--primary)" }}
       />
-      <p className="text-xs text-zinc-400">{hint}</p>
+      <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>{hint}</p>
     </div>
   );
 }
@@ -71,7 +75,7 @@ export default function ParameterControls({
         min={50}
         max={5000}
         step={50}
-        format={(v) => `≥ ${v} RPM`}
+        format={(v) => `\u2265 ${v} RPM`}
         onChange={onCoverThresholdChange}
       />
       <Slider
