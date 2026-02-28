@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { SpongeResult, SpongeSite } from "@/lib/sponge";
+import type { UtrDesignResult, BindingSite } from "@/lib/utr-design";
 
 interface StructurePlotsProps {
-  sponge: SpongeResult;
+  design: UtrDesignResult;
   mirnaNames: string[];
 }
 
@@ -21,9 +21,9 @@ function colourForMirna(index: number): string {
 
 // ── 1D Linear Binding Site Map ──────────────────────────────
 
-function LinearSpongeMap({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: string[] }) {
-  const totalLen = sponge.fullUtr3.length;
-  const siteRegions = sponge.regions.filter((r) => r.type === "site");
+function LinearBindingMap({ design, mirnaNames }: { design: UtrDesignResult; mirnaNames: string[] }) {
+  const totalLen = design.fullUtr3.length;
+  const siteRegions = design.regions.filter((r) => r.type === "site");
 
   // SVG dimensions
   const width = 900;
@@ -61,7 +61,7 @@ function LinearSpongeMap({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNa
           fontSize={13}
           fontWeight={600}
         >
-          mRNA Sponge 3&#x2032;UTR &middot; {totalLen} nt &middot; {siteRegions.length} binding sites
+          3&#x2032;UTR &middot; {totalLen} nt &middot; {siteRegions.length} binding sites
         </text>
 
         {/* 5' and 3' labels */}
@@ -72,7 +72,7 @@ function LinearSpongeMap({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNa
         <line x1={padX} y1={barY + barH / 2} x2={width - padX} y2={barY + barH / 2} stroke="var(--border-strong)" strokeWidth={2} />
 
         {/* Region blocks */}
-        {sponge.regions.map((region, i) => {
+        {design.regions.map((region, i) => {
           const x = toX(region.start);
           const w = Math.max(1, toX(region.end) - toX(region.start));
 
@@ -246,9 +246,9 @@ function nussinovFold(seq: string): string {
 
 // ── Arc Diagram (secondary structure visualisation) ──────────
 
-function ArcDiagram({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: string[] }) {
+function ArcDiagram({ design, mirnaNames }: { design: UtrDesignResult; mirnaNames: string[] }) {
   const [computing, setComputing] = useState(false);
-  const seq = sponge.cassette.toUpperCase();
+  const seq = design.cassette.toUpperCase();
 
   const { structure, pairs } = useMemo(() => {
     const struct = nussinovFold(seq);
@@ -264,10 +264,10 @@ function ArcDiagram({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: 
     return { structure: struct, pairs: p };
   }, [seq]);
 
-  // Build per-nucleotide colour map from sponge regions
+  // Build per-nucleotide colour map from design regions
   const ntColours = useMemo(() => {
-    const colours = new Array(sponge.fullUtr3.length).fill(SPACER_COLOUR);
-    for (const region of sponge.regions) {
+    const colours = new Array(design.fullUtr3.length).fill(SPACER_COLOUR);
+    for (const region of design.regions) {
       if (region.type === "site") {
         const c = colourForMirna(region.mirnaIndex ?? 0);
         for (let i = region.start; i < region.end; i++) {
@@ -276,9 +276,9 @@ function ArcDiagram({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: 
       }
     }
     // Offset to cassette region: find first site region
-    const cassetteStart = sponge.regions.find((r) => r.type === "site")?.start ?? 0;
+    const cassetteStart = design.regions.find((r) => r.type === "site")?.start ?? 0;
     return colours.slice(cassetteStart, cassetteStart + seq.length);
-  }, [sponge, seq.length]);
+  }, [design, seq.length]);
 
   const n = seq.length;
   const width = 900;
@@ -335,8 +335,8 @@ function ArcDiagram({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: 
           })}
 
           {/* Sequence baseline - coloured blocks per region */}
-          {sponge.regions.filter(r => r.type === "site" || r.type === "spacer").map((region, i) => {
-            const cassetteStart = sponge.regions.find((r) => r.type === "site")?.start ?? 0;
+          {design.regions.filter(r => r.type === "site" || r.type === "spacer").map((region, i) => {
+            const cassetteStart = design.regions.find((r) => r.type === "site")?.start ?? 0;
             const relStart = region.start - cassetteStart;
             const relEnd = region.end - cassetteStart;
             if (relStart < 0 || relEnd > n) return null;
@@ -385,7 +385,7 @@ function ArcDiagram({ sponge, mirnaNames }: { sponge: SpongeResult; mirnaNames: 
 const WC = new Set(["AU", "UA", "GC", "CG"]);
 const WOBBLE = new Set(["GU", "UG"]);
 
-function DuplexView({ site, index }: { site: SpongeSite; index: number }) {
+function DuplexView({ site, index }: { site: BindingSite; index: number }) {
   const mirna = site.mirnaSeq;
   const siteRev = site.siteSeq.split("").reverse().join("");
   const colour = colourForMirna(index);
@@ -429,9 +429,9 @@ function DuplexView({ site, index }: { site: SpongeSite; index: number }) {
 
 // ── Main Export ──────────────────────────────────────────────
 
-export default function StructurePlots({ sponge, mirnaNames }: StructurePlotsProps) {
+export default function StructurePlots({ design, mirnaNames }: StructurePlotsProps) {
   const [selectedSite, setSelectedSite] = useState(0);
-  const site = sponge.sites[selectedSite];
+  const site = design.sites[selectedSite];
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -441,9 +441,9 @@ export default function StructurePlots({ sponge, mirnaNames }: StructurePlotsPro
         style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
       >
         <h2 className="text-sm font-semibold mb-3 sm:mb-4" style={{ color: "var(--text-primary)" }}>
-          mRNA sponge — linear binding site map
+          Linear binding site map
         </h2>
-        <LinearSpongeMap sponge={sponge} mirnaNames={mirnaNames} />
+        <LinearBindingMap design={design} mirnaNames={mirnaNames} />
       </section>
 
       {/* Arc diagram — predicted secondary structure */}
@@ -452,9 +452,9 @@ export default function StructurePlots({ sponge, mirnaNames }: StructurePlotsPro
         style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
       >
         <h2 className="text-sm font-semibold mb-3 sm:mb-4" style={{ color: "var(--text-primary)" }}>
-          mRNA sponge — predicted secondary structure
+          Predicted secondary structure
         </h2>
-        <ArcDiagram sponge={sponge} mirnaNames={mirnaNames} />
+        <ArcDiagram design={design} mirnaNames={mirnaNames} />
       </section>
 
       {/* Binding site duplex detail */}
@@ -468,9 +468,9 @@ export default function StructurePlots({ sponge, mirnaNames }: StructurePlotsPro
           </h2>
 
           {/* Site tabs */}
-          {sponge.sites.length > 1 && (
+          {design.sites.length > 1 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {sponge.sites.map((s, i) => (
+              {design.sites.map((s, i) => (
                 <button
                   key={s.mirnaId}
                   onClick={() => setSelectedSite(i)}

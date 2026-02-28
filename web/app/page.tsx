@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMirnaData } from "@/lib/mirna-data";
 import { greedyCover } from "@/lib/greedy";
-import { generateSpongeUtr } from "@/lib/sponge";
+import { generateUtr } from "@/lib/utr-design";
 import type { GreedyResult, GreedyParams } from "@/lib/types";
 import CellTypeSelector from "./components/CellTypeSelector";
 import ParameterControls from "./components/ParameterControls";
@@ -42,12 +42,12 @@ export default function HomePage() {
     return greedyCover(data, debouncedParams);
   }, [data, debouncedParams]);
 
-  // Generate mRNA sponge 3'UTR from selected miRNAs
-  const sponge = useMemo(() => {
+  // Generate 3'UTR design from selected miRNAs
+  const design = useMemo(() => {
     if (!result || result.steps.length === 0) return null;
     const stepsWithSeq = result.steps.filter((s) => s.matureSeq.length > 0);
     if (stepsWithSeq.length === 0) return null;
-    return generateSpongeUtr(
+    return generateUtr(
       stepsWithSeq.map((s) => s.matureSeq),
       stepsWithSeq.map((s) => s.mirnaId),
     );
@@ -65,7 +65,7 @@ export default function HomePage() {
             The Optimizer
           </h1>
           <p className="text-xs sm:text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-            Greedy set-cover algorithm for tissue-specific 3&apos;UTR sponge design
+            Greedy set-cover algorithm for tissue-specific 3&apos;UTR design
           </p>
         </div>
         {data && (
@@ -158,7 +158,7 @@ export default function HomePage() {
               <p>
                 The greedy set-cover algorithm finds the fewest miRNAs that collectively
                 silence every off-target while remaining below the threshold in all targets.
-                The resulting mRNA sponge 3&apos;UTR contains bulged binding sites for the
+                The resulting 3&apos;UTR contains bulged binding sites for the
                 selected miRNAs.
               </p>
 
@@ -179,7 +179,7 @@ export default function HomePage() {
                   </li>
                   <li className="flex gap-2">
                     <span className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--bg-inset)", color: "var(--text-secondary)" }}>4</span>
-                    <span>Review the mRNA sponge sequence and structure plots on the right.</span>
+                    <span>Review the 3&apos;UTR sequence and structure plots on the right.</span>
                   </li>
                 </ol>
               </div>
@@ -209,7 +209,7 @@ export default function HomePage() {
                     className="text-sm font-semibold mb-3 sm:mb-4"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    Sponge target expression across cell types
+                    Target expression across cell types
                   </h2>
                   <MirnaChart
                     data={data}
@@ -228,13 +228,13 @@ export default function HomePage() {
                     className="text-sm font-semibold mb-3 sm:mb-4"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    Selected sponge targets
+                    Selected targets
                   </h2>
                   <ResultsTable result={result} targets={targets} />
                 </section>
 
-                {/* mRNA sponge sequence */}
-                {sponge && (
+                {/* 3'UTR sequence */}
+                {design && (
                   <section
                     className="rounded-xl border p-4 sm:p-5"
                     style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
@@ -243,16 +243,16 @@ export default function HomePage() {
                       className="text-sm font-semibold mb-3 sm:mb-4"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      mRNA sponge 3&apos;UTR sequence
+                      3&apos;UTR sequence
                     </h2>
-                    <SequencePanel sponge={sponge} />
+                    <SequencePanel design={design} />
                   </section>
                 )}
 
                 {/* Structure visualisations (client-side) */}
-                {sponge && (
+                {design && (
                   <StructurePlots
-                    sponge={sponge}
+                    design={design}
                     mirnaNames={result.steps
                       .filter((s) => s.matureSeq.length > 0)
                       .map((s) => s.mirnaId)}

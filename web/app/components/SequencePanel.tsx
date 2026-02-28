@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { SpongeResult } from "@/lib/sponge";
+import type { UtrDesignResult } from "@/lib/utr-design";
 
 interface SequencePanelProps {
-  sponge: SpongeResult;
+  design: UtrDesignResult;
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -49,9 +49,9 @@ const NUC_COLOURS: Record<string, string> = {
   C: "var(--amber)",
 };
 
-export default function SequencePanel({ sponge }: SequencePanelProps) {
+export default function SequencePanel({ design }: SequencePanelProps) {
   const [view, setView] = useState<"full" | "cassette">("full");
-  const seq = view === "full" ? sponge.fullUtr3 : sponge.cassette;
+  const seq = view === "full" ? design.fullUtr3 : design.cassette;
 
   return (
     <div className="flex flex-col gap-3">
@@ -87,8 +87,8 @@ export default function SequencePanel({ sponge }: SequencePanelProps) {
       {/* Stats */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-[10px]" style={{ color: "var(--text-tertiary)" }}>
         <span>{seq.length} nt</span>
-        <span>{sponge.sites.length} binding site{sponge.sites.length !== 1 ? " types" : ""}</span>
-        <span>{sponge.numSites} repeats</span>
+        <span>{design.sites.length} binding site{design.sites.length !== 1 ? " types" : ""}</span>
+        <span>{design.numSites} repeats</span>
       </div>
 
       {/* Sequence display */}

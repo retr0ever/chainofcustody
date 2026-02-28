@@ -1,9 +1,9 @@
 "use client";
 
-import type { SpongeResult, SpongeRegion } from "@/lib/sponge";
+import type { UtrDesignResult, UtrRegion } from "@/lib/utr-design";
 
-interface SpongeArchitectureProps {
-  sponge: SpongeResult;
+interface UtrArchitectureProps {
+  design: UtrDesignResult;
 }
 
 /** Assign a stable colour to each miRNA by index */
@@ -20,11 +20,11 @@ const REGION_META: Record<string, { label: string; colour: string }> = {
   poly_a: { label: "Poly-A signal", colour: "#8896AB" },
 };
 
-export default function SpongeArchitecture({ sponge }: SpongeArchitectureProps) {
-  const totalLen = sponge.fullUtr3.length;
+export default function UtrArchitecture({ design }: UtrArchitectureProps) {
+  const totalLen = design.fullUtr3.length;
 
   // Unique miRNAs for legend
-  const uniqueMirnas = sponge.sites.map((s, i) => ({
+  const uniqueMirnas = design.sites.map((s, i) => ({
     id: s.mirnaId,
     colour: SITE_COLOURS[i % SITE_COLOURS.length],
   }));
@@ -44,7 +44,7 @@ export default function SpongeArchitecture({ sponge }: SpongeArchitectureProps) 
           className="flex rounded-md overflow-hidden"
           style={{ height: 28 }}
         >
-          {sponge.regions.map((region, i) => {
+          {design.regions.map((region, i) => {
             const widthPct = ((region.end - region.start) / totalLen) * 100;
             const colour = region.type === "site"
               ? SITE_COLOURS[(region.mirnaIndex ?? 0) % SITE_COLOURS.length]
@@ -100,12 +100,12 @@ export default function SpongeArchitecture({ sponge }: SpongeArchitectureProps) 
           <tbody>
             <RegionRow label="Stop codon" colour={REGION_META.stop.colour} length={3} start={0} />
             <RegionRow label="Lead-in" colour={REGION_META.lead_in.colour}
-              length={sponge.regions.find((r) => r.type === "lead_in")?.seq.length ?? 0}
-              start={sponge.regions.find((r) => r.type === "lead_in")?.start ?? 0} />
+              length={design.regions.find((r) => r.type === "lead_in")?.seq.length ?? 0}
+              start={design.regions.find((r) => r.type === "lead_in")?.start ?? 0} />
 
             {/* Binding sites grouped by miRNA */}
             {uniqueMirnas.map((m) => {
-              const siteRegions = sponge.regions.filter((r) => r.type === "site" && r.mirnaId === m.id);
+              const siteRegions = design.regions.filter((r) => r.type === "site" && r.mirnaId === m.id);
               const siteLen = siteRegions[0]?.seq.length ?? 0;
               return (
                 <RegionRow key={m.id}
@@ -119,14 +119,14 @@ export default function SpongeArchitecture({ sponge }: SpongeArchitectureProps) 
             })}
 
             <RegionRow label="Spacers" colour={REGION_META.spacer.colour}
-              length={4} count={sponge.numSites - 1}
-              start={sponge.regions.find((r) => r.type === "spacer")?.start ?? 0} />
+              length={4} count={design.numSites - 1}
+              start={design.regions.find((r) => r.type === "spacer")?.start ?? 0} />
             <RegionRow label="Lead-out" colour={REGION_META.lead_out.colour}
-              length={sponge.regions.find((r) => r.type === "lead_out")?.seq.length ?? 0}
-              start={sponge.regions.find((r) => r.type === "lead_out")?.start ?? 0} />
+              length={design.regions.find((r) => r.type === "lead_out")?.seq.length ?? 0}
+              start={design.regions.find((r) => r.type === "lead_out")?.start ?? 0} />
             <RegionRow label="Poly-A signal" colour={REGION_META.poly_a.colour}
-              length={sponge.regions.find((r) => r.type === "poly_a")?.seq.length ?? 0}
-              start={sponge.regions.find((r) => r.type === "poly_a")?.start ?? 0} />
+              length={design.regions.find((r) => r.type === "poly_a")?.seq.length ?? 0}
+              start={design.regions.find((r) => r.type === "poly_a")?.start ?? 0} />
           </tbody>
         </table>
       </div>
@@ -181,7 +181,7 @@ function RegionRow({ label, colour, length, start, count }: {
   );
 }
 
-function tooltipFor(region: SpongeRegion): string {
+function tooltipFor(region: UtrRegion): string {
   const label = region.type === "site"
     ? `Binding site: ${region.mirnaId}`
     : REGION_META[region.type]?.label ?? region.type;

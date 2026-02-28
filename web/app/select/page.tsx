@@ -51,7 +51,7 @@ export default function SelectPage() {
             miRNA Cell-Type Selector
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-            Greedy set-cover algorithm for tissue-specific sponge design
+            Greedy set-cover algorithm for tissue-specific 3&apos;UTR design
           </p>
         </div>
         {data && (

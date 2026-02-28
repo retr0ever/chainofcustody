@@ -1,6 +1,6 @@
 /**
  * TypeScript port of chainofcustody/three_prime/generate_utr3.py
- * Generates an mRNA sponge 3'UTR from selected miRNA mature sequences.
+ * Generates a 3'UTR from selected miRNA mature sequences.
  */
 
 const COMPLEMENT: Record<string, string> = {
@@ -33,7 +33,7 @@ const POLY_A_SIGNAL =
 
 export type RegionType = "stop" | "lead_in" | "site" | "spacer" | "lead_out" | "poly_a";
 
-export interface SpongeRegion {
+export interface UtrRegion {
   type: RegionType;
   start: number;
   end: number;
@@ -44,7 +44,7 @@ export interface SpongeRegion {
   mirnaIndex?: number;
 }
 
-export interface SpongeSite {
+export interface BindingSite {
   mirnaId: string;
   mirnaSeq: string;
   siteSeq: string;
@@ -53,24 +53,24 @@ export interface SpongeSite {
   threePrimeMatch: string;
 }
 
-export interface SpongeResult {
+export interface UtrDesignResult {
   fullUtr3: string;
   cassette: string;
-  sites: SpongeSite[];
-  regions: SpongeRegion[];
+  sites: BindingSite[];
+  regions: UtrRegion[];
   numSites: number;
 }
 
-export function generateSpongeUtr(
+export function generateUtr(
   mirnaSequences: string[],
   mirnaIds: string[],
   numSites = 16,
-): SpongeResult {
+): UtrDesignResult {
   if (mirnaSequences.length === 0) {
     return { fullUtr3: "", cassette: "", sites: [], regions: [], numSites: 0 };
   }
 
-  const spongeSites: SpongeSite[] = [];
+  const bindingSites: BindingSite[] = [];
   for (let idx = 0; idx < mirnaSequences.length; idx++) {
     const mirna = mirnaSequences[idx].toUpperCase().replace(/T/g, "U");
     const rc = reverseComplement(mirna);
@@ -80,7 +80,7 @@ export function generateSpongeUtr(
     const threePrimeMatch = rc.slice(0, -12);
     const bulgeMismatch = createMismatch(bulgeRc);
 
-    spongeSites.push({
+    bindingSites.push({
       mirnaId: mirnaIds[idx] ?? `miRNA-${idx + 1}`,
       mirnaSeq: mirna,
       siteSeq: threePrimeMatch + bulgeMismatch + seedMatch,
@@ -91,7 +91,7 @@ export function generateSpongeUtr(
   }
 
   // Build cassette and track regions
-  const regions: SpongeRegion[] = [];
+  const regions: UtrRegion[] = [];
   let pos = 0;
 
   // Stop codon
@@ -105,14 +105,14 @@ export function generateSpongeUtr(
   // Cassette: sites + spacers
   let cassette = "";
   for (let i = 0; i < numSites; i++) {
-    const site = spongeSites[i % spongeSites.length];
+    const site = bindingSites[i % bindingSites.length];
     regions.push({
       type: "site",
       start: pos,
       end: pos + site.siteSeq.length,
       seq: site.siteSeq,
       mirnaId: site.mirnaId,
-      mirnaIndex: i % spongeSites.length,
+      mirnaIndex: i % bindingSites.length,
     });
     cassette += site.siteSeq;
     pos += site.siteSeq.length;
@@ -135,5 +135,5 @@ export function generateSpongeUtr(
 
   const fullUtr3 = `${STOP_CODON}${LEAD_IN}${cassette}${LEAD_OUT}${POLY_A_SIGNAL}`;
 
-  return { fullUtr3, cassette, sites: spongeSites, regions, numSites };
+  return { fullUtr3, cassette, sites: bindingSites, regions, numSites };
 }

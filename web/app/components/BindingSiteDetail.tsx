@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { SpongeSite } from "@/lib/sponge";
+import type { BindingSite } from "@/lib/utr-design";
 
 interface BindingSiteDetailProps {
-  sites: SpongeSite[];
+  sites: BindingSite[];
 }
 
 const SITE_COLOURS = [
@@ -16,7 +16,7 @@ const SITE_COLOURS = [
  * Build the alignment between miRNA (5'→3') and the binding site (3'→5').
  * Shows Watson-Crick pairs as |, G-U wobble as :, mismatches as space.
  */
-function buildAlignment(site: SpongeSite) {
+function buildAlignment(site: BindingSite) {
   const mirna = site.mirnaSeq;
   const siteSeq = site.siteSeq;
 
@@ -47,7 +47,7 @@ function buildAlignment(site: SpongeSite) {
   return lines;
 }
 
-function DuplexView({ site, index }: { site: SpongeSite; index: number }) {
+function DuplexView({ site, index }: { site: BindingSite; index: number }) {
   const alignment = buildAlignment(site);
   const colour = SITE_COLOURS[index % SITE_COLOURS.length];
   const seedStart = 1; // 0-indexed position 1 = miRNA pos 2
