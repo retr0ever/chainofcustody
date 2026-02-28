@@ -8,7 +8,6 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from .scoring import score_parsed
 from .fitness import DEFAULT_WEIGHTS, compute_fitness
 
 
@@ -29,17 +28,14 @@ def format_report(report: dict) -> str:
                  f"**3'UTR:** {info['utr3_length']}bp")
     lines.append("")
 
-    # Traffic light summary
     lines.append("## Summary")
     lines.append("")
     lines.append("| Metric | Status |")
     lines.append("|--------|--------|")
     for metric, status in summary.items():
-        label = metric.replace("_", " ").title()
-        lines.append(f"| {label} | {status} |")
+        lines.append(f"| {metric.replace('_', ' ').title()} | {status} |")
     lines.append("")
 
-    # Structure details
     lines.append("## 1. Structure")
     utr5 = structure.get("utr5_accessibility", {})
     if utr5.get("mfe") is not None:
@@ -49,7 +45,6 @@ def format_report(report: dict) -> str:
                  f"({gmfe.get('mfe_per_nt', 'N/A')} per nt)")
     lines.append("")
 
-    # Manufacturing details
     lines.append("## 2. Manufacturability")
     lines.append(f"- **Overall:** {'PASS' if mfg['overall_pass'] else 'FAIL'} "
                  f"({mfg['total_violations']} violations)")
@@ -64,7 +59,6 @@ def format_report(report: dict) -> str:
     lines.append(f"- **Restriction sites:** {rs_label}")
     lines.append("")
 
-    # Stability details
     if stab:
         lines.append("## 3. Stability")
         lines.append(f"- **GC3 (wobble position):** {stab.get('gc3', 0):.1%}")
@@ -73,7 +67,6 @@ def format_report(report: dict) -> str:
         lines.append(f"- **Stability score:** {stab.get('stability_score', 0):.2f}")
     lines.append("")
 
-    # RiboNN details
     ribonn = report.get("ribonn_scores", {})
     lines.append("## 4. Translation Efficiency")
     if ribonn.get("available"):
@@ -97,20 +90,12 @@ def report_to_json(report: dict, include_fitness: bool = True) -> str:
 
 STATUS_COLOURS = {"GREEN": "green", "AMBER": "yellow", "RED": "red", "GREY": "dim"}
 
-
-def _styled_status(status: str) -> Text:
-    colour = STATUS_COLOURS.get(status, "dim")
-    return Text(status, style=f"bold {colour}")
-
-
-def _metric_label(metric: str) -> str:
-    labels = {
-        "utr5_accessibility": "5'UTR accessibility",
-        "manufacturability": "Manufacturability",
-        "stability": "Stability",
-        "translation_efficiency": "Translation eff.",
-    }
-    return labels.get(metric, metric)
+_METRIC_LABELS = {
+    "utr5_accessibility": "5'UTR accessibility",
+    "manufacturability": "Manufacturability",
+    "stability": "Stability",
+    "translation_efficiency": "Translation eff.",
+}
 
 
 def _metric_value(metric: str, report: dict, fitness: dict) -> str:
@@ -147,17 +132,15 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
 
     console.print()
 
-    # ── Header
     title = f"Sequence Report{f' — {label}' if label else ''}"
-    header_text = (
+    header = (
         f"{info['total_length']} bp    "
         f"5'UTR {info['utr5_length']}  |  "
         f"CDS {info['cds_length']} ({info['num_codons']} codons)  |  "
         f"3'UTR {info['utr3_length']}"
     )
-    console.print(Panel(header_text, title=title, border_style="blue", expand=False))
+    console.print(Panel.fit(header, title=title, border_style="blue"))
 
-    # ── Summary table
     table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
     table.add_column("Metric", style="bold")
     table.add_column("Value", justify="right")
@@ -165,10 +148,11 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     table.add_column("", style="dim")
 
     for metric, status in summary.items():
+        colour = STATUS_COLOURS.get(status, "dim")
         table.add_row(
-            _metric_label(metric),
+            _METRIC_LABELS.get(metric, metric),
             _metric_value(metric, report, fitness),
-            _styled_status(status),
+            f"[bold {colour}]{status}[/]",
             _metric_hint(metric, report),
         )
 
@@ -176,98 +160,77 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     console.print(table)
     console.print()
 
-    # ── Detail sections (only for non-GREEN metrics)
-    has_details = False
-
-    # Structure detail
+    # Detail sections (only for non-GREEN metrics)
     if summary.get("utr5_accessibility") != "GREEN":
-        has_details = True
         console.print(Rule("Structure", style="dim"))
         utr5 = structure.get("utr5_accessibility", {})
         if utr5.get("mfe") is not None:
-            console.print(f"  5'UTR MFE  {utr5['mfe']} kcal/mol", style="bold")
-            console.print(f"  {utr5.get('message', '')}", style="dim")
+            console.print(f"  5'UTR MFE  [bold]{utr5['mfe']} kcal/mol[/]")
+            console.print(f"  [dim]{utr5.get('message', '')}[/]")
         gmfe = structure.get("global_mfe", {})
         console.print(f"  Global MFE  {gmfe.get('mfe', 'N/A')} kcal/mol ({gmfe.get('mfe_per_nt', 'N/A')} per nt)")
         console.print()
 
-    # Manufacturing detail
     if summary.get("manufacturability") != "GREEN":
-        has_details = True
         console.print(Rule("Manufacturability", style="dim"))
-        gc_v = mfg["gc_windows"]
-        if not gc_v["pass"]:
-            console.print(f"  GC windows  {len(gc_v['violations'])} violations", style="yellow")
-        else:
-            console.print("  GC windows  pass", style="green")
-        hp = mfg["homopolymers"]
-        if not hp["pass"]:
-            console.print(f"  Homopolymers  {len(hp['violations'])} runs >8nt", style="yellow")
-        else:
-            console.print("  Homopolymers  pass", style="green")
-        rs = mfg["restriction_sites"]
-        if not rs["pass"]:
-            positions = [f"{v['enzyme']}@{v['position']}" for v in rs["violations"]]
-            console.print(f"  Restriction sites  {len(rs['violations'])} found ({', '.join(positions)})", style="yellow")
-        else:
-            console.print("  Restriction sites  pass", style="green")
+        for label_, check in [
+            ("GC windows", mfg["gc_windows"]),
+            ("Homopolymers", mfg["homopolymers"]),
+            ("Restriction sites", mfg["restriction_sites"]),
+        ]:
+            if check["pass"]:
+                console.print(f"  [green]{label_}  pass[/]")
+            else:
+                n = len(check["violations"])
+                if label_ == "Restriction sites":
+                    sites = ", ".join(f"{v['enzyme']}@{v['position']}" for v in check["violations"])
+                    suffix = f" ({sites})"
+                elif label_ == "Homopolymers":
+                    suffix = " runs >8nt"
+                else:
+                    suffix = " violations"
+                console.print(f"  [yellow]{label_}  {n}{suffix}[/]")
         console.print()
 
-    # Stability detail
     stab = report.get("stability_scores", {})
     if summary.get("stability") != "GREEN" and stab:
-        has_details = True
         console.print(Rule("Stability", style="dim"))
-        console.print(f"  GC3 (wobble position)  {stab.get('gc3', 0):.1%}", style="bold")
+        console.print(f"  [bold]GC3 (wobble position)  {stab.get('gc3', 0):.1%}[/]")
         console.print(f"  MFE per nt  {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
         are = stab.get("au_rich_elements", 0)
-        if are > 0:
-            console.print(f"  AU-rich elements  {are} in 3'UTR", style="yellow")
-        else:
-            console.print("  AU-rich elements  none", style="green")
-        console.print(f"  Combined score  {stab.get('stability_score', 0):.2f}", style="dim")
+        console.print(f"  [{'yellow' if are > 0 else 'green'}]AU-rich elements  {are if are > 0 else 'none'}[/]")
+        console.print(f"  [dim]Combined score  {stab.get('stability_score', 0):.2f}[/]")
         console.print()
 
-    # Translation efficiency detail
     ribonn = report.get("ribonn_scores", {})
     if summary.get("translation_efficiency") != "GREEN" and ribonn:
-        has_details = True
         console.print(Rule("Translation Efficiency", style="dim"))
         if ribonn.get("available"):
-            console.print(f"  Mean TE  {ribonn.get('mean_te', 0):.4f}", style="bold")
-            console.print(f"  {ribonn.get('message', '')}", style="dim")
+            console.print(f"  [bold]Mean TE  {ribonn.get('mean_te', 0):.4f}[/]")
+            console.print(f"  [dim]{ribonn.get('message', '')}[/]")
         else:
-            console.print(f"  {ribonn.get('message', 'RiboNN not available')}", style="dim")
+            console.print(f"  [dim]{ribonn.get('message', 'RiboNN not available')}[/]")
         console.print()
 
-    # ── Suggestions
     if fitness["suggestions"]:
         console.print(Rule("What to improve", style="dim"))
         for i, s in enumerate(fitness["suggestions"], 1):
-            priority_style = "bold red" if s["priority"] == "high" else "yellow" if s["priority"] == "medium" else "dim"
-            line = Text(f"  {i}. ")
-            line.append(s["action"], style=priority_style)
-            console.print(line)
+            style = "bold red" if s["priority"] == "high" else "yellow" if s["priority"] == "medium" else "dim"
+            console.print(f"  {i}. [{style}]{s['action']}[/]")
         console.print()
 
-    # ── Overall score
     score = fitness["overall"]
     score_style = "bold green" if score >= 0.7 else "bold yellow" if score >= 0.4 else "bold red"
-    console.print(Text(f"  Overall fitness  {score:.2f}", style=score_style))
+    console.print(f"  [{score_style}]Overall fitness  {score:.2f}[/]")
     console.print()
-
-
-def _score_cell(value: float, status: str) -> Text:
-    """Format a normalised 0-1 score with status colour."""
-    colour = STATUS_COLOURS.get(status, "dim")
-    return Text(f"{value:.2f}", style=colour)
 
 
 def print_batch_report(console: Console, results: list[dict]) -> None:
     """Print a ranked comparison table for multiple candidates."""
     console.print()
 
-    table = Table(title="Candidate Ranking", show_header=True, header_style="bold", padding=(0, 1))
+    table = Table(title="Candidate Ranking", show_header=True, header_style="bold",
+                  padding=(0, 1))
     table.add_column("Rank", justify="right", style="bold")
     table.add_column("Candidate")
     table.add_column("5'UTR", justify="center")
@@ -281,23 +244,24 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
         fitness = r["fitness"]
         summary = report["summary"]
         scores = fitness["scores"]
-
         overall = fitness["overall"]
-        overall_style = "green" if overall >= 0.7 else "yellow" if overall >= 0.4 else "red"
+
+        def _cell(metric: str) -> str:
+            c = STATUS_COLOURS.get(summary.get(metric, "GREY"), "dim")
+            return f"[{c}]{scores[metric]['value']:.2f}[/]"
 
         mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
-        utr5_status = summary.get("utr5_accessibility", "GREY")
-        utr5_colour = STATUS_COLOURS.get(utr5_status, "dim")
-        utr5_text = Text(f"{mfe}" if mfe is not None else "N/A", style=utr5_colour)
+        utr5_colour = STATUS_COLOURS.get(summary.get("utr5_accessibility", "GREY"), "dim")
+        overall_colour = "green" if overall >= 0.7 else "yellow" if overall >= 0.4 else "red"
 
         table.add_row(
             str(i),
             r["label"],
-            utr5_text,
-            _score_cell(scores["manufacturability"]["value"], summary["manufacturability"]),
-            _score_cell(scores["stability"]["value"], summary.get("stability", "GREY")),
-            _score_cell(scores["translation_efficiency"]["value"], summary.get("translation_efficiency", "GREY")),
-            Text(f"{overall:.2f}", style=overall_style),
+            f"[{utr5_colour}]{mfe if mfe is not None else 'N/A'}[/]",
+            _cell("manufacturability"),
+            _cell("stability"),
+            _cell("translation_efficiency"),
+            f"[{overall_colour}]{overall:.2f}[/]",
         )
 
     console.print(table)
@@ -306,22 +270,22 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
 
 def _print_score_legend(console: Console) -> None:
     """Print a compact legend explaining each scored metric."""
-    legend = Table(show_header=True, header_style="bold dim", padding=(0, 1), box=None, show_edge=False)
+    legend = Table(show_header=True, header_style="bold dim", padding=(0, 1),
+                   box=None, show_edge=False)
     legend.add_column("Metric", style="dim")
     legend.add_column("Weight", justify="right", style="dim")
     legend.add_column("Target / Interpretation", style="dim")
 
     rows = [
-        ("5'UTR", "utr5_accessibility", "MFE kcal/mol; > −20 means accessible cap for translation"),
-        ("Mfg",   "manufacturability",  "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
-        ("Stab",  "stability",          "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("5'UTR", "utr5_accessibility",    "MFE kcal/mol; > −20 means accessible cap for translation"),
+        ("Mfg",   "manufacturability",     "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
+        ("Stab",  "stability",             "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
         ("TE",    "translation_efficiency", "RiboNN predicted translation efficiency; >= 1.5 ideal"),
-        ("Score", None,                 "weighted sum of all metrics above"),
+        ("Score", None,                    "weighted sum of all metrics above"),
     ]
 
     for label, key, description in rows:
-        weight = f"{DEFAULT_WEIGHTS[key]:.0%}" if key else "—"
-        legend.add_row(label, weight, description)
+        legend.add_row(label, f"{DEFAULT_WEIGHTS[key]:.0%}" if key else "—", description)
 
     console.print(legend)
     console.print()
