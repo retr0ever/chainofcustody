@@ -1,5 +1,7 @@
 # Chain of Custody
 
+![RNA Chain Logo](assets/Chain_of_custody.png)
+
 A pipeline for mRNA sequence construction and evaluation. Design tissue-specific mRNA sequences and score them across 5 metrics.
 
 ## Installation
