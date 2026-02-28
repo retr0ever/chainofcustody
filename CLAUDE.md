@@ -27,6 +27,8 @@ data/
   MOESM3_ESM.xlsx      # Translation efficiency dataset (human, multiple cell types)
 scripts/               # One-time data preparation utilities (not part of the package)
   merge_db.py          # Builds three_prime/db/ CSVs from Bioconductor microRNAome (requires R + rpy2)
+vendor/
+  RiboNN/              # git submodule — Sanofi RiboNN deep-CNN (translation efficiency)
 tests/                 # pytest suite (skip integration tests by default)
 ```
 
@@ -110,4 +112,4 @@ fitness = compute_fitness(report)
 ## Dependencies requiring system install
 
 - **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Install via conda or system package manager if pip install fails.
-- **RiboNN** (optional): Translation efficiency prediction. Clone from `github.com/Sanofi-Public/RiboNN`, then set `RIBONN_DIR=/path/to/RiboNN`. Requires PyTorch. The metric degrades gracefully to GREY/0.5 when unavailable.
+- **RiboNN** (optional): Translation efficiency prediction. Included as a git submodule at `vendor/RiboNN`. Initialise with `git submodule update --init vendor/RiboNN`, then set `RIBONN_DIR=$(pwd)/vendor/RiboNN`. Requires PyTorch. The metric degrades gracefully to GREY/0.5 when unavailable.

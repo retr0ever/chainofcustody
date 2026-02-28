@@ -1,0 +1,3 @@
+[submodule "vendor/RiboNN"]
+	path = vendor/RiboNN
+	url = git@github.com:Sanofi-Public/RiboNN.git
