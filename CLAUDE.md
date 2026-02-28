@@ -56,10 +56,14 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 
 | Metric | Weight | GREEN threshold | What it measures |
 |---|---|---|---|
-| utr5_accessibility | 22% | MFE < -30 kcal/mol | 5'UTR structure stability |
-| manufacturability | 30% | 0 violations | DNA synthesis feasibility |
-| stability | 35% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt, AREs) |
-| translation_efficiency | 13% | mean TE >= 1.5 | RiboNN predicted translation efficiency (optional) |
+| utr5_accessibility | 35% | MFE/nt >= -0.1 | 5'UTR accessibility (sigmoid midpoint=-0.2, k=15) |
+| manufacturability | 20% | 0 UTR violations | DNA synthesis feasibility (sigmoid midpoint=1, k=-2) |
+| stability | 25% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt; sigmoid midpoint=0.6, k=8) |
+| specificity | 20% | target TE >= 2.5 | Absolute RiboNN target-tissue TE (sigmoid midpoint=2.0, k=1.5) |
+
+Note: tissue specificity (target vs off-target TE differential) is not used as the
+primary metric because it is dominated by the fixed CDS and provides no gradient when
+only the 5'UTR is evolved. Absolute target TE is optimised instead.
 
 ### Tests
 

@@ -3,10 +3,10 @@
 import math
 
 DEFAULT_WEIGHTS = {
-    "utr5_accessibility": 0.15,
-    "manufacturability": 0.20,
-    "stability": 0.25,
-    "specificity": 0.40,
+    "utr5_accessibility": 0.2,
+    "manufacturability": 0.2,
+    "stability": 0.2,
+    "specificity": 0.4,
 }
 
 
@@ -52,16 +52,22 @@ def _normalise_stability(report: dict) -> float:
 
 
 def _normalise_te(report: dict) -> float:
-    """Sigmoid on the target-vs-off-target TE differential (higher → 1.0).
+    """Sigmoid on absolute target-tissue TE (higher → 1.0).
 
-    Midpoint at 0.0 differential; ~0.88 at +0.5 (good selectivity),
-    ~0.40 at -0.1 (current typical), ~0.12 at -0.5.
+    The tissue-specific differential (target vs off-target) is dominated by
+    the fixed CDS and provides essentially no gradient when only the 5'UTR
+    is evolved — all candidates score nearly identically on the differential.
+
+    Instead we score on absolute *target_te*: the 5'UTR does influence overall
+    ribosome loading efficiency (through accessibility), so maximising absolute
+    TE in the target tissue is both achievable and meaningful.
+
+    Sigmoid midpoint at 2.0; k=1.5 → gentle transition providing gradient
+    across the typical achievable range of 1.5–3.5.
     """
     ribonn = report["ribonn_scores"]
     target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
-    mean_off = ribonn.get("mean_off_target_te", ribonn.get("mean_te", 0.0))
-    diff = target_te - mean_off
-    return _sigmoid(diff, midpoint=0.0, k=4.0)
+    return _sigmoid(target_te, midpoint=2.0, k=1.5)
 
 
 NORMALISERS = {
@@ -169,8 +175,8 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
         mean_off = ribonn.get("mean_off_target_te", 0.0)
         return (
-            f"Improve TE selectivity: {target} TE = {target_te:.2f}, "
-            f"mean off-target = {mean_off:.2f} (target: differential >= 1.5)"
+            f"Improve {target} TE = {target_te:.2f} (target: >= 2.5); "
+            f"mean off-target = {mean_off:.2f}"
         )
 
     return None

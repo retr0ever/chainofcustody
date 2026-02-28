@@ -27,8 +27,7 @@ def format_report(report: dict) -> str:
                  f"**5'UTR:** {info['utr5_length']}bp | "
                  f"**CDS:** {info['cds_length']}bp ({info['num_codons']} codons) | "
                  f"**3'UTR:** {info['utr3_length']}bp | "
-                 f"**Cap:** {info.get('cap5_length', 0)}nt | "
-                 f"**Poly-A:** {info.get('poly_a_length', 0)}nt")
+                 f"**Cap:** {info.get('cap5_length', 0)}nt | ")
     lines.append("")
 
     lines.append("## Summary")
@@ -123,7 +122,7 @@ def _metric_hint(metric: str, report: dict) -> str:
         target = ribonn.get("target_cell_type", "target")
         target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
         mean_off = ribonn.get("mean_off_target_te", 0.0)
-        return f"{target}: {target_te:.2f}, off-target: {mean_off:.2f}"
+        return f"{target}: {target_te:.2f} (off-target mean: {mean_off:.2f})"
     return ""
 
 
@@ -140,7 +139,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
     title = f"Sequence Report{f' — {label}' if label else ''}"
     full_len = info.get("full_length", info["total_length"])
     cap_len = info.get("cap5_length", 0)
-    polya_len = info.get("poly_a_length", 0)
     header = (
         f"[dim]cap {cap_len}nt[/dim] + "
         f"5'UTR {info['utr5_length']}  |  "
@@ -289,7 +287,7 @@ def _print_score_legend(console: Console) -> None:
         ("5'UTR", "utr5_accessibility",    "MFE/nt (5'UTR only); >= -0.1 accessible (green), < -0.3 over-structured (red)"),
         ("Mfg",   "manufacturability",     "5'UTR synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
         ("Stab",  "stability",             "mRNA stability 0→1 (GC3 wobble, MFE/nt)"),
-        ("TE",    "specificity", "RiboNN selectivity: target TE − mean off-target TE; differential >= 1.5 ideal"),
+        ("TE",    "specificity", "RiboNN absolute target-tissue TE; sigmoid midpoint 2.0, gradient 1.5–3.5"),
         ("Score", None,                    "weighted sum of all metrics above"),
     ]
 

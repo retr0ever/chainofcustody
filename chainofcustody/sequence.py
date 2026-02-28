@@ -11,10 +11,6 @@ KOZAK = "GCCACC"
 # in mRNA therapeutic design.
 CAP5 = "GGG"
 
-# Poly-A tail length standard for human mRNA therapeutics (120 nt).
-POLY_A_LENGTH = 120
-POLY_A = "A" * POLY_A_LENGTH
-
 
 @dataclass
 class mRNASequence:
@@ -47,12 +43,12 @@ class mRNASequence:
     @property
     def full_sequence(self) -> str:
         """Complete mRNA molecule: 5' cap + core transcript + poly-A tail."""
-        return CAP5 + self.utr5 + self.cds + self.utr3 + POLY_A
+        return CAP5 + self.utr5 + self.cds + self.utr3
 
     @property
     def full_length(self) -> int:
         """Total length including 5' cap and poly-A tail."""
-        return len(CAP5) + len(self) + POLY_A_LENGTH
+        return len(CAP5) + len(self)
 
     def __len__(self) -> int:
         return len(self.utr5) + len(self.cds) + len(self.utr3)
@@ -64,7 +60,6 @@ class mRNASequence:
             f"utr5={len(self.utr5)}nt + "
             f"cds={len(self.cds)}nt + "
             f"utr3={len(self.utr3)}nt + "
-            f"polyA={POLY_A_LENGTH}nt, "
             f"total={self.full_length}nt)"
         )
 

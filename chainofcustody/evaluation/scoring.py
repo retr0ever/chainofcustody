@@ -1,6 +1,6 @@
 """Orchestrate the full 4-metric scoring pipeline over a parsed mRNA sequence."""
 
-from chainofcustody.sequence import CAP5, POLY_A_LENGTH, mRNASequence
+from chainofcustody.sequence import CAP5, mRNASequence
 from chainofcustody.evaluation.structure import fold_sequence_bounded, fold_sequence, score_structure
 from chainofcustody.evaluation.manufacturing import score_manufacturing
 from chainofcustody.evaluation.stability import score_stability
@@ -64,7 +64,6 @@ def score_parsed(
             "utr5_length": len(parsed.utr5),
             "cds_length": len(parsed.cds),
             "utr3_length": len(parsed.utr3),
-            "poly_a_length": POLY_A_LENGTH,
             "num_codons": len(parsed.codons),
         },
         "structure_scores": structure_scores,

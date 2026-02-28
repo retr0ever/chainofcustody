@@ -55,7 +55,7 @@ def mock_optimize_run(mocker):
 def mock_scoring(mocker):
     """Mock the evaluation pipeline so optimize tests don't need DRfold2/RiboNN."""
     mock_report = {
-        "sequence_info": {"total_length": 4, "full_length": 127, "cap5_length": 3, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "poly_a_length": 120, "num_codons": 1},
+        "sequence_info": {"total_length": 4, "full_length": 127, "cap5_length": 3, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
         "structure_scores": {"utr5_accessibility": {"mfe": None, "mfe_per_nt": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
         "manufacturing_scores": {"total_violations": 0, "utr5_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "stability_score": 0.7, "status": "GREEN"},
