@@ -1,9 +1,9 @@
-"""Print miRNAs for a fixed cell type filtered by expression threshold and entropy.
+"""Print miRNAs for a fixed off-target cell type filtered by expression threshold and entropy.
 
 Usage
 -----
-    python -m chainofcustody.three_prime.analysis --cell-type Hepatocyte_derived
-    python -m chainofcustody.three_prime.analysis --cell-type Hepatocyte_derived --threshold 500 --top 5
+    python -m chainofcustody.three_prime.analysis --off-target-cell-type Hepatocyte_derived
+    python -m chainofcustody.three_prime.analysis --off-target-cell-type Hepatocyte_derived --threshold 500 --top 5
 """
 
 from __future__ import annotations
@@ -36,14 +36,14 @@ def _load_mature_sequences(db_dir: Path = DB_DIR) -> dict[str, str]:
 
 def load_data(db_dir: Path = DB_DIR):
     """Return mature-sequence map, sample-level miRNA-expression matrix, and
-    grouped cell type × miRNA matrix with Shannon entropy column."""
+    grouped off-target cell type × miRNA matrix with Shannon entropy column."""
 
     mature_seqs = _load_mature_sequences(db_dir)
 
     df_samples = pd.read_csv(db_dir / "expression_matrix.csv", index_col=0)
     df_metadata = pd.read_csv(db_dir / "sample_metadata.csv", index_col=0)
 
-    # map sample columns → cell type labels
+    # map sample columns → off-target cell type labels
     map_sample_celltype = df_metadata["CellType"].to_dict()
     df_sample_celltype = df_samples.copy()
     df_sample_celltype.columns = df_sample_celltype.columns.map(map_sample_celltype)
@@ -54,10 +54,10 @@ def load_data(db_dir: Path = DB_DIR):
     # miRNA × sample expression matrix (index = MiRBase_ID)
     df_mirna_expr = df_sample_celltype[df_sample_celltype.sum(axis=1) > 0]
 
-    # group duplicate cell type columns → mean per cell type
+    # group duplicate off-target cell type columns → mean per off-target cell type
     df_grouped = df_mirna_expr.T.groupby(level=0).mean().T
 
-    # Shannon entropy (base-2) per miRNA across cell types
+    # Shannon entropy (base-2) per miRNA across off-target cell types
     row_sums = df_grouped.sum(axis=1)
     prob = df_grouped.div(row_sums.replace(0, np.nan), axis=0)
     df_grouped["shannon_entropy"] = (
@@ -70,8 +70,8 @@ def load_data(db_dir: Path = DB_DIR):
 
 # ── core logic ──────────────────────────────────────────────────────────────
 
-def mirnas_for_cell_type(
-    cell_type: str,
+def mirnas_for_off_target_cell_type(
+    off_target_cell_type: str,
     mature_seqs: dict[str, str],
     df_mirna_expr: pd.DataFrame,
     df_grouped: pd.DataFrame,
@@ -79,20 +79,20 @@ def mirnas_for_cell_type(
     top_n: int = 10,
 ) -> pd.DataFrame:
     """Return the *top_n* lowest-entropy miRNAs whose mean expression in
-    *cell_type* is above *threshold*.
+    *off_target_cell_type* is above *threshold*.
 
     Parameters
     ----------
-    cell_type : str
-        Cell type name (must match a column in *df_grouped*).
+    off_target_cell_type : str
+        Off-target cell type name (must match a column in *df_grouped*).
     mature_seqs : dict[str, str]
         Mapping MiRBase_ID → mature sequence.
     df_mirna_expr : DataFrame
-        MiRNA × sample expression matrix (columns = cell type labels).
+        MiRNA × sample expression matrix (columns = off-target cell type labels).
     df_grouped : DataFrame
-        MiRNA × cell type matrix with a ``shannon_entropy`` column.
+        MiRNA × off-target cell type matrix with a ``shannon_entropy`` column.
     threshold : float
-        Minimum mean expression in *cell_type* for a miRNA to be reported.
+        Minimum mean expression in *off_target_cell_type* for a miRNA to be reported.
     top_n : int
         Number of lowest-entropy miRNAs to return.
 
@@ -102,18 +102,19 @@ def mirnas_for_cell_type(
         Columns: MiRBase_ID, mature_sequence, mean_expr, shannon_entropy
         — sorted by entropy ascending.
     """
-    if cell_type not in df_grouped.columns:
+    if off_target_cell_type not in df_grouped.columns:
         available = sorted(c for c in df_grouped.columns if c != "shannon_entropy")
         raise ValueError(
-            f"Cell type '{cell_type}' not found. Available cell types:\n"
+            f"Off-target cell type '{off_target_cell_type}' not found. "
+            f"Available off-target cell types:\n"
             + "\n".join(f"  {t}" for t in available)
         )
 
-    # mean expression per miRNA in the chosen cell type
-    cell_type_expr = df_grouped[cell_type]
+    # mean expression per miRNA in the chosen off-target cell type
+    off_target_cell_type_expr = df_grouped[off_target_cell_type]
 
     # filter by threshold
-    mask = cell_type_expr >= threshold
+    mask = off_target_cell_type_expr >= threshold
     candidates = df_grouped.loc[mask].copy()
 
     if candidates.empty:
@@ -127,7 +128,7 @@ def mirnas_for_cell_type(
     result = pd.DataFrame({
         "MiRBase_ID": candidates.index,
         "mature_sequence": [mature_seqs.get(mid, "") for mid in candidates.index],
-        "mean_expr": cell_type_expr.loc[candidates.index].values,
+        "mean_expr": off_target_cell_type_expr.loc[candidates.index].values,
         "shannon_entropy": candidates["shannon_entropy"].values,
     }).reset_index(drop=True)
 
@@ -138,7 +139,7 @@ def mirnas_for_cell_type(
 
 def plot_mirnas_boxplot(
     mirna_ids: list[str],
-    cell_type: str,
+    off_target_cell_type: str,
     df_mirna_expr: pd.DataFrame,
     df_grouped: pd.DataFrame,
     top_celltypes: int = 20,
@@ -149,14 +150,14 @@ def plot_mirnas_boxplot(
     ----------
     mirna_ids : list[str]
         MiRBase IDs to plot.
-    cell_type : str
-        Cell type name (highlighted in the title).
+    off_target_cell_type : str
+        Off-target cell type name (highlighted in the title).
     df_mirna_expr : DataFrame
-        MiRNA × sample expression matrix (columns = cell type labels).
+        MiRNA × sample expression matrix (columns = off-target cell type labels).
     df_grouped : DataFrame
-        MiRNA × cell type matrix with ``shannon_entropy`` column.
+        MiRNA × off-target cell type matrix with ``shannon_entropy`` column.
     top_celltypes : int
-        Max cell types to show per panel (ordered by median expression).
+        Max off-target cell types to show per panel (ordered by median expression).
     """
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -169,34 +170,34 @@ def plot_mirnas_boxplot(
     for ax, mid in zip(axes, mirna_ids):
         mir_vals = df_mirna_expr.loc[mid]
         plot_df = pd.DataFrame({
-            "Cell type": mir_vals.index,
+            "Off-target cell type": mir_vals.index,
             "Expression": mir_vals.values,
         })
         plot_df = plot_df[plot_df["Expression"] > 0]
 
-        # keep top N cell types by median expression
+        # keep top N off-target cell types by median expression
         top_ct = (
-            plot_df.groupby("Cell type")["Expression"]
+            plot_df.groupby("Off-target cell type")["Expression"]
             .median()
             .sort_values(ascending=False)
             .head(top_celltypes)
             .index
         )
-        plot_df = plot_df[plot_df["Cell type"].isin(top_ct)]
+        plot_df = plot_df[plot_df["Off-target cell type"].isin(top_ct)]
 
-        sns.boxplot(data=plot_df, x="Cell type", y="Expression",
+        sns.boxplot(data=plot_df, x="Off-target cell type", y="Expression",
                     ax=ax, color="steelblue")
-        sns.stripplot(data=plot_df, x="Cell type", y="Expression",
+        sns.stripplot(data=plot_df, x="Off-target cell type", y="Expression",
                       ax=ax, color="black", size=2, alpha=0.5)
 
         h = df_grouped.loc[mid, "shannon_entropy"]
         ax.set_title(f"{mid}  (entropy = {h:.3f})")
-        ax.set_xlabel("Cell type")
+        ax.set_xlabel("Off-target cell type")
         ax.set_ylabel("Expression")
         ax.tick_params(axis="x", rotation=90)
 
     fig.suptitle(
-        f"Lowest-entropy miRNA distributions — cell type: {cell_type}",
+        f"Lowest-entropy miRNA distributions — off-target cell type: {off_target_cell_type}",
         fontsize=13, fontweight="bold", y=1.02,
     )
     plt.show()
@@ -206,42 +207,42 @@ def plot_mirnas_boxplot(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Print lowest-entropy miRNAs for a given cell type."
+        description="Print lowest-entropy miRNAs for a given off-target cell type."
     )
     parser.add_argument(
-        "--cell-type", "-t", required=True,
-        help="Cell type name (e.g. Hepatocyte_derived).",
+        "--off-target-cell-type", "-t", required=True,
+        help="Off-target cell type name (e.g. Hepatocyte_derived).",
     )
     parser.add_argument(
         "--threshold", type=float, default=0.0,
-        help="Minimum mean expression in the cell type (default: 0).",
+        help="Minimum mean expression in the off-target cell type (default: 0).",
     )
     parser.add_argument(
         "--top", "-n", type=int, default=10,
         help="Number of lowest-entropy miRNAs to report (default: 10).",
     )
     parser.add_argument(
-        "--list-cell-types", action="store_true",
-        help="List available cell type names and exit.",
+        "--list-off-target-cell-types", action="store_true",
+        help="List available off-target cell type names and exit.",
     )
     parser.add_argument(
         "--plot", action="store_true",
-        help="Show debug boxplots of the selected miRNAs across cell types.",
+        help="Show debug boxplots of the selected miRNAs across off-target cell types.",
     )
     args = parser.parse_args()
 
     print("Loading data …")
     mature_seqs, df_mirna_expr, df_grouped = load_data()
 
-    if args.list_cell_types:
-        cell_types = sorted(c for c in df_grouped.columns if c != "shannon_entropy")
-        print(f"\n{len(cell_types)} available cell types:")
-        for t in cell_types:
+    if args.list_off_target_cell_types:
+        off_target_cell_types = sorted(c for c in df_grouped.columns if c != "shannon_entropy")
+        print(f"\n{len(off_target_cell_types)} available off-target cell types:")
+        for t in off_target_cell_types:
             print(f"  {t}")
         return
 
-    result = mirnas_for_cell_type(
-        cell_type=args.cell_type,
+    result = mirnas_for_off_target_cell_type(
+        off_target_cell_type=args.off_target_cell_type,
         mature_seqs=mature_seqs,
         df_mirna_expr=df_mirna_expr,
         df_grouped=df_grouped,
@@ -250,12 +251,12 @@ def main() -> None:
     )
 
     if result.empty:
-        print(f"\nNo miRNAs found for cell type '{args.cell_type}' "
+        print(f"\nNo miRNAs found for off-target cell type '{args.off_target_cell_type}' "
               f"with mean expression >= {args.threshold}.")
         return
 
-    print(f"\nCell type : {args.cell_type}")
-    print(f"Threshold : {args.threshold}")
+    print(f"\nOff-target cell type : {args.off_target_cell_type}")
+    print(f"Threshold            : {args.threshold}")
     print(f"Top {args.top} lowest-entropy miRNAs:\n")
     print(f"{'MiRBase_ID':<22} {'Mature sequence':<28} {'Mean expr':>12} {'Entropy (H)':>12}")
     print("-" * 76)
@@ -268,7 +269,7 @@ def main() -> None:
     if args.plot:
         plot_mirnas_boxplot(
             mirna_ids=result["MiRBase_ID"].tolist(),
-            cell_type=args.cell_type,
+            off_target_cell_type=args.off_target_cell_type,
             df_mirna_expr=df_mirna_expr,
             df_grouped=df_grouped,
         )
