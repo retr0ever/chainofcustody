@@ -18,8 +18,6 @@ chainofcustody/
     fitness.py         # Normalisation (all metrics to 0-1), weighted scoring, suggestion engine
     report.py          # Rich terminal output + markdown/JSON formatting
     data.py            # MOESM3_ESM.xlsx loader, per-codon TE weight computation
-    mutations.py       # Protein-preserving operators: synonymous swap, crossover, miR-122 insertion
-    evolve.py          # Evolutionary loop (selection, crossover, mutation, early stopping)
   optimization/        # pymoo NSGA-III multi-objective optimizer
     problem.py         # SequenceProblem: 6 objectives = 1 - normalised metric score each
     operators.py       # NucleotideSampling, NucleotideMutation (random, not protein-preserving)
@@ -93,7 +91,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 ## Python API
 
 ```python
-from chainofcustody.evaluation import score_sequence, compute_fitness, evaluate_candidate, evaluate_batch, evolve
+from chainofcustody.evaluation import score_sequence, compute_fitness, evaluate_candidate, evaluate_batch
 
 # Score a single sequence (accepts DNA or RNA)
 report = score_sequence("AUGCCCAAAGGG...")
@@ -104,9 +102,6 @@ result = evaluate_candidate("AUGCCCAAAGGG...", label="my_seq")
 
 # Batch scoring with ranking
 results = evaluate_batch(["seq1", "seq2", "seq3"])
-
-# Evolutionary optimisation (protein-preserving mutations)
-result = evolve(population=["AUGCCC..."], generations=20, mutation_rate=0.05)
 ```
 
 ## Incomplete modules
