@@ -1,7 +1,6 @@
 """Metric 1: Codon quality + Metric 2: Cell-type selectivity scoring."""
 
 import math
-from collections import Counter
 
 from python_codon_tables import get_codons_table
 
@@ -10,17 +9,6 @@ from .data import get_liver_codon_weights, get_codon_weights
 
 # Human codon usage table (NCBI Taxonomy ID 9606)
 HUMAN_CODON_TABLE = get_codons_table("h_sapiens_9606")
-
-# Genetic code: codon -> amino acid
-CODON_TO_AA: dict[str, str] = {}
-AA_TO_CODONS: dict[str, list[str]] = {}
-for aa, codons_dict in HUMAN_CODON_TABLE.items():
-    if aa == "*":
-        continue
-    for codon, freq in codons_dict.items():
-        codon_rna = codon.upper()
-        CODON_TO_AA[codon_rna] = aa
-        AA_TO_CODONS.setdefault(aa, []).append(codon_rna)
 
 
 def _relative_adaptiveness(codon_table: dict) -> dict[str, float]:

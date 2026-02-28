@@ -134,6 +134,7 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "pymoo" },
+    { name = "python-codon-tables" },
     { name = "requests" },
     { name = "rich-click" },
     { name = "rpy2" },
@@ -158,6 +159,7 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.0.1" },
     { name = "pymoo", specifier = ">=0.6.1.6" },
+    { name = "python-codon-tables", specifier = ">=0.1.18" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "rich-click", specifier = ">=1.9.7" },
     { name = "rpy2", specifier = ">=3.5.0" },
@@ -977,6 +979,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/68/14/eb014d26be205d38ad5ad20d9a80f7d201472e08167f0bb4361e251084a9/pytest_mock-3.15.1.tar.gz", hash = "sha256:1849a238f6f396da19762269de72cb1814ab44416fa73a8686deac10b0d87a0f", size = 34036, upload-time = "2025-09-16T16:37:27.081Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/cc/06253936f4a7fa2e0f48dfe6d851d9c56df896a9ab09ac019d70b760619c/pytest_mock-3.15.1-py3-none-any.whl", hash = "sha256:0a25e2eb88fe5168d535041d09a4529a188176ae608a6d249ee65abc0949630d", size = 10095, upload-time = "2025-09-16T16:37:25.734Z" },
+]
+
+[[package]]
+name = "python-codon-tables"
+version = "0.1.18"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/db/da662b0ba76f97c34c10fd603a8237e63bed7b49cbe8a3c7997506c56804/python_codon_tables-0.1.18.tar.gz", hash = "sha256:73f552980ad292afb8e8bcd6debf824041b59b0a7cec009b67b11690c3863907", size = 11435, upload-time = "2025-05-09T18:12:08.39Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/99/4d8045a5323c6258db35ffc2e3ff4babe73d22ca5ee0080560a198a6aaac/python_codon_tables-0.1.18-py3-none-any.whl", hash = "sha256:3539d041d561f972ddca3601cf9bd4e19bedc32c36d1c459d63f069f973bbedc", size = 13434, upload-time = "2025-05-09T18:12:07.172Z" },
 ]
 
 [[package]]

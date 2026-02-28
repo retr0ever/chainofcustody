@@ -8,7 +8,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from chainofcustody.evaluation.scoring import score_parsed
+from .scoring import score_parsed
 from .fitness import DEFAULT_WEIGHTS, compute_fitness
 
 
@@ -123,13 +123,6 @@ STATUS_COLOURS = {"GREEN": "green", "AMBER": "yellow", "RED": "red", "GREY": "di
 def _styled_status(status: str) -> Text:
     colour = STATUS_COLOURS.get(status, "dim")
     return Text(status, style=f"bold {colour}")
-
-
-def _styled_metric(metric: str, report: dict, status: str) -> Text:
-    """Show the actual numeric value for a metric, coloured by its status."""
-    value = _metric_value(metric, report)
-    colour = STATUS_COLOURS.get(status, "dim")
-    return Text(value or status, style=f"bold {colour}")
 
 
 def _cai_bar(value: float, width: int = 10) -> Text:
