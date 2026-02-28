@@ -110,8 +110,12 @@ def optimize_and_plot(
         from chainofcustody.optimization import KOZAK, METRIC_NAMES, mRNASequence, SequenceProblem, run, score_parsed
         from chainofcustody.evaluation.fitness import compute_fitness
 
-        # This is the module you asked to use for generating PNGs
-        from chainofcustody.evaluation.plot_secondary_structure import predict_and_plot_full_and_utrs
+        # Add project root to path to reach dashboard/ folder
+        import sys
+        root = Path(__file__).resolve().parent.parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from dashboard.plot_secondary_structure import predict_and_plot_full_and_utrs
 
         try:
             cds = _to_rna(get_canonical_cds(gene))

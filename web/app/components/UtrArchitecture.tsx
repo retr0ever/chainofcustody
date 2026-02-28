@@ -13,6 +13,8 @@ const SITE_COLOURS = [
 ];
 
 const REGION_META: Record<string, { label: string; colour: string }> = {
+  utr5: { label: "5' UTR", colour: "#4A8DAD" },
+  cds: { label: "CDS", colour: "#3D6880" },
   stop: { label: "Stop", colour: "#F87171" },
   lead_in: { label: "Lead-in", colour: "#556378" },
   spacer: { label: "Spacer", colour: "#2A3A50" },
@@ -21,7 +23,7 @@ const REGION_META: Record<string, { label: string; colour: string }> = {
 };
 
 export default function UtrArchitecture({ design }: UtrArchitectureProps) {
-  const totalLen = design.fullUtr3.length;
+  const totalLen = design.fullTranscript.length;
 
   // Unique miRNAs for legend
   const uniqueMirnas = design.sites.map((s, i) => ({
@@ -58,7 +60,7 @@ export default function UtrArchitecture({ design }: UtrArchitectureProps) {
                   width: `${widthPct}%`,
                   minWidth: region.type === "spacer" ? 2 : 1,
                   background: colour,
-                  opacity: region.type === "spacer" ? 0.4 : 0.85,
+                  opacity: (region.type === "spacer" || region.type === "cds") ? 0.4 : 0.85,
                 }}
                 title={tooltipFor(region)}
               />
@@ -98,7 +100,15 @@ export default function UtrArchitecture({ design }: UtrArchitectureProps) {
             </tr>
           </thead>
           <tbody>
-            <RegionRow label="Stop codon" colour={REGION_META.stop.colour} length={3} start={0} />
+            {design.utr5 && (
+              <RegionRow label="5' UTR" colour={REGION_META.utr5.colour} length={design.utr5.length} start={0} />
+            )}
+            {design.cds && (
+              <RegionRow label="CDS" colour={REGION_META.cds.colour} length={design.cds.length} start={design.utr5.length} />
+            )}
+            <RegionRow label="Stop codon" colour={REGION_META.stop.colour} length={3} 
+              start={design.regions.find(r => r.type === "stop")?.start ?? 0} />
+            
             <RegionRow label="Lead-in" colour={REGION_META.lead_in.colour}
               length={design.regions.find((r) => r.type === "lead_in")?.seq.length ?? 0}
               start={design.regions.find((r) => r.type === "lead_in")?.start ?? 0} />
@@ -106,6 +116,7 @@ export default function UtrArchitecture({ design }: UtrArchitectureProps) {
             {/* Binding sites grouped by miRNA */}
             {uniqueMirnas.map((m) => {
               const siteRegions = design.regions.filter((r) => r.type === "site" && r.mirnaId === m.id);
+              if (siteRegions.length === 0) return null;
               const siteLen = siteRegions[0]?.seq.length ?? 0;
               return (
                 <RegionRow key={m.id}

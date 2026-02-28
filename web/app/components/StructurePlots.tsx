@@ -33,11 +33,11 @@ function useStructureApi(design: UtrDesignResult, mirnaNames: string[]) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sequence = design.fullUtr3;
+  const { utr5, cds, fullUtr3 } = design;
   const namesKey = mirnaNames.join(",");
 
   useEffect(() => {
-    if (!sequence) return;
+    if (!fullUtr3) return;
 
     let cancelled = false;
     setLoading(true);
@@ -46,7 +46,12 @@ function useStructureApi(design: UtrDesignResult, mirnaNames: string[]) {
     fetch(`${STRUCTURE_API}/api/fold`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sequence, mirna_names: mirnaNames }),
+      body: JSON.stringify({ 
+        utr5, 
+        cds, 
+        utr3: fullUtr3, 
+        mirna_names: mirnaNames 
+      }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`API returned ${res.status}`);
@@ -63,7 +68,7 @@ function useStructureApi(design: UtrDesignResult, mirnaNames: string[]) {
       });
 
     return () => { cancelled = true; };
-  }, [sequence, namesKey]);
+  }, [utr5, cds, fullUtr3, namesKey]);
 
   return { data, loading, error };
 }
@@ -168,12 +173,14 @@ export default function StructurePlots({ design, mirnaNames }: StructurePlotsPro
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* 1D Linear binding site map (from API) */}
       <section
-        className="rounded-xl border p-4 sm:p-5"
+        className="rounded-xl border p-4 sm:p-5 shadow-sm"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
       >
-        <h2 className="text-sm font-semibold mb-3 sm:mb-4" style={{ color: "var(--text-primary)" }}>
-          3&apos;UTR cassette map
+        <h2 className="text-sm font-semibold mb-3 sm:mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+          <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
+          Full construct map
         </h2>
+
         {loading && <LoadingSpinner label="Generating cassette map..." />}
         {error && <ApiError message={error} />}
         {data?.plot_1d && <SvgPanel svg={data.plot_1d} label="1D cassette map" />}
@@ -181,10 +188,11 @@ export default function StructurePlots({ design, mirnaNames }: StructurePlotsPro
 
       {/* 2D Secondary structure (from API) */}
       <section
-        className="rounded-xl border p-4 sm:p-5"
+        className="rounded-xl border p-4 sm:p-5 shadow-sm"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
       >
-        <h2 className="text-sm font-semibold mb-3 sm:mb-4" style={{ color: "var(--text-primary)" }}>
+        <h2 className="text-sm font-semibold mb-3 sm:mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+          <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
           Predicted secondary structure
         </h2>
         {loading && <LoadingSpinner label="Folding with ViennaRNA..." />}

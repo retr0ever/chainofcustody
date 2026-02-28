@@ -50,8 +50,17 @@ const NUC_COLOURS: Record<string, string> = {
 };
 
 export default function SequencePanel({ design }: SequencePanelProps) {
-  const [view, setView] = useState<"full" | "cassette">("full");
-  const seq = view === "full" ? design.fullUtr3 : design.cassette;
+  const [view, setView] = useState<"transcript" | "full" | "cassette">("transcript");
+  
+  const getSeq = () => {
+    switch(view) {
+      case "transcript": return design.fullTranscript;
+      case "full": return design.fullUtr3;
+      case "cassette": return design.cassette;
+    }
+  };
+
+  const seq = getSeq();
 
   return (
     <div className="flex flex-col gap-3">
@@ -59,26 +68,37 @@ export default function SequencePanel({ design }: SequencePanelProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setView("transcript")}
+            className="text-[10px] px-2 py-1 rounded-md transition-colors cursor-pointer"
+            style={{
+              background: view === "transcript" ? "var(--primary-bg)" : "var(--bg-raised)",
+              color: view === "transcript" ? "var(--primary)" : "var(--text-secondary)",
+              border: `1px solid ${view === "transcript" ? "var(--primary)" : "var(--border)"}`,
+            }}
+          >
+            Full mRNA
+          </button>
+          <button
             onClick={() => setView("full")}
-            className="text-xs px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+            className="text-[10px] px-2 py-1 rounded-md transition-colors cursor-pointer"
             style={{
               background: view === "full" ? "var(--primary-bg)" : "var(--bg-raised)",
               color: view === "full" ? "var(--primary)" : "var(--text-secondary)",
               border: `1px solid ${view === "full" ? "var(--primary)" : "var(--border)"}`,
             }}
           >
-            Full 3&apos;UTR
+            3&apos;UTR
           </button>
           <button
             onClick={() => setView("cassette")}
-            className="text-xs px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+            className="text-[10px] px-2 py-1 rounded-md transition-colors cursor-pointer"
             style={{
               background: view === "cassette" ? "var(--primary-bg)" : "var(--bg-raised)",
               color: view === "cassette" ? "var(--primary)" : "var(--text-secondary)",
               border: `1px solid ${view === "cassette" ? "var(--primary)" : "var(--border)"}`,
             }}
           >
-            Cassette only
+            Cassette
           </button>
         </div>
         <CopyButton text={seq} label="Copy" />
@@ -87,13 +107,18 @@ export default function SequencePanel({ design }: SequencePanelProps) {
       {/* Stats */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-[10px]" style={{ color: "var(--text-tertiary)" }}>
         <span>{seq.length} nt</span>
-        <span>{design.sites.length} binding site{design.sites.length !== 1 ? " types" : ""}</span>
-        <span>{design.numSites} repeats</span>
+        {view === "transcript" && (
+          <>
+            {design.utr5 && <span>5&apos;UTR: {design.utr5.length}nt</span>}
+            {design.cds && <span>CDS: {design.cds.length}nt</span>}
+          </>
+        )}
+        <span>{design.numSites} sites</span>
       </div>
 
       {/* Sequence display */}
       <div
-        className="rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto font-mono text-xs leading-relaxed break-all"
+        className="rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto font-mono text-[10px] leading-relaxed break-all"
         style={{ background: "var(--bg-inset)" }}
       >
         {seq.toUpperCase().split("").map((nt, i) => (

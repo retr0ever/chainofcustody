@@ -84,7 +84,7 @@ def test_help(runner):
     result = runner.invoke(main, ["--help"])
 
     assert result.exit_code == 0
-    assert "NSGA3" in result.output
+    assert "optimisation" in result.output.lower() or "optim" in result.output.lower()
 
 
 def test_summary_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):

@@ -31,7 +31,7 @@ const LEAD_OUT = "gauc";
 const POLY_A_SIGNAL =
   "CUCAGGUGCAGGCUGCCUAUCAGAAGGUGGUGGCUGGUGUGGCCAAUGCCCUGGCUCACAAAUACCACUGAGAUCUUUUUCCCUCUGCCAAAAAUUAUGGGGACAUCAUGAAGCCCCUUGAGCAUCUGACUUCUGGCUAAUAAAGGAAAUUUAUUUUCAUUGCAAUAGUGUGUUGGAAUUUUUUGUGUCUCUCACUCGGAAGGACAUAUGGGAGGGCAAAUCAUUUAAAACAUCAGAAUGAGUAUUUGGUUUAGAGUUUGGCA";
 
-export type RegionType = "stop" | "lead_in" | "site" | "spacer" | "lead_out" | "poly_a";
+export type RegionType = "utr5" | "cds" | "stop" | "lead_in" | "site" | "spacer" | "lead_out" | "poly_a";
 
 export interface UtrRegion {
   type: RegionType;
@@ -55,6 +55,9 @@ export interface BindingSite {
 
 export interface UtrDesignResult {
   fullUtr3: string;
+  fullTranscript: string;
+  utr5: string;
+  cds: string;
   cassette: string;
   sites: BindingSite[];
   regions: UtrRegion[];
@@ -65,9 +68,20 @@ export function generateUtr(
   mirnaSequences: string[],
   mirnaIds: string[],
   numSites = 16,
+  utr5Seq = "",
+  cdsSeq = "",
 ): UtrDesignResult {
   if (mirnaSequences.length === 0) {
-    return { fullUtr3: "", cassette: "", sites: [], regions: [], numSites: 0 };
+    return { 
+      fullUtr3: "", 
+      fullTranscript: "", 
+      utr5: "", 
+      cds: "", 
+      cassette: "", 
+      sites: [], 
+      regions: [], 
+      numSites: 0 
+    };
   }
 
   const bindingSites: BindingSite[] = [];
@@ -90,11 +104,25 @@ export function generateUtr(
     });
   }
 
-  // Build cassette and track regions
+  // Build full transcript and track regions
   const regions: UtrRegion[] = [];
   let pos = 0;
 
-  // Stop codon
+  // 5' UTR
+  const cleanUtr5 = utr5Seq.toUpperCase().replace(/T/g, "U");
+  if (cleanUtr5) {
+    regions.push({ type: "utr5", start: pos, end: pos + cleanUtr5.length, seq: cleanUtr5 });
+    pos += cleanUtr5.length;
+  }
+
+  // CDS
+  const cleanCds = cdsSeq.toUpperCase().replace(/T/g, "U");
+  if (cleanCds) {
+    regions.push({ type: "cds", start: pos, end: pos + cleanCds.length, seq: cleanCds });
+    pos += cleanCds.length;
+  }
+
+  // Stop codon (only if not already at end of CDS)
   regions.push({ type: "stop", start: pos, end: pos + STOP_CODON.length, seq: STOP_CODON });
   pos += STOP_CODON.length;
 
@@ -134,6 +162,18 @@ export function generateUtr(
   pos += POLY_A_SIGNAL.length;
 
   const fullUtr3 = `${STOP_CODON}${LEAD_IN}${cassette}${LEAD_OUT}${POLY_A_SIGNAL}`;
+  // Use lowercase for utr5 and cds in the full transcript so the backend 
+  // structure API doesn't misidentify them as binding sites (which are uppercase)
+  const fullTranscript = `${cleanUtr5.toLowerCase()}${cleanCds.toLowerCase()}${fullUtr3}`;
 
-  return { fullUtr3, cassette, sites: bindingSites, regions, numSites };
+  return { 
+    fullUtr3, 
+    fullTranscript,
+    utr5: cleanUtr5,
+    cds: cleanCds,
+    cassette, 
+    sites: bindingSites, 
+    regions, 
+    numSites 
+  };
 }

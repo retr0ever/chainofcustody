@@ -29,6 +29,59 @@ export default function HomePage() {
   const [targetThreshold, setTargetThreshold] = useState(10);
   const [coverThreshold, setCoverThreshold] = useState(1000);
   const [maxMirnas, setMaxMirnas] = useState(20);
+  const [utr5Seq, setUtr5Seq] = useState("");
+  const [cdsSeq, setCdsSeq] = useState("");
+  const [geneSymbol, setGeneSymbol] = useState("");
+  const [fetchingCds, setFetchingCds] = useState(false);
+  const [optimizationMode, setOptimizationMode] = useState<"manual" | "optimize">("manual");
+  const [optimizing, setOptimizing] = useState(false);
+
+  const handleFetchCds = async () => {
+    if (!geneSymbol) return;
+    setFetchingCds(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_STRUCTURE_API ?? "http://localhost:8000";
+      const response = await fetch(`${apiBase}/api/gene-cds/${geneSymbol}`);
+      const data = await response.json();
+      if (data.ok) {
+        setCdsSeq(data.cds);
+      } else {
+        alert(`Error fetching CDS: ${data.error}`);
+      }
+    } catch (err) {
+      alert("Failed to connect to structure API server.");
+    } finally {
+      setFetchingCds(false);
+    }
+  };
+
+  const handleRunOptimization = async () => {
+    if (!geneSymbol) return;
+    setOptimizing(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_STRUCTURE_API ?? "http://localhost:8000";
+      const response = await fetch(`${apiBase}/api/optimize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          gene: geneSymbol,
+          target_cell_type: targets[0] || "Dendritic_cell",
+          n_gen: 10
+        }),
+      });
+      const data = await response.json();
+      if (data.ok && data.best?.utr5) {
+        setUtr5Seq(data.best.utr5);
+        if (data.best.cds) setCdsSeq(data.best.cds);
+      } else {
+        alert(`Optimisation failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert("Failed to connect to structure API server.");
+    } finally {
+      setOptimizing(false);
+    }
+  };
 
   const params = useMemo<GreedyParams | null>(() => {
     if (!data || targets.length === 0 || offTargets.length === 0) return null;
@@ -50,11 +103,14 @@ export default function HomePage() {
     return generateUtr(
       stepsWithSeq.map((s) => s.matureSeq),
       stepsWithSeq.map((s) => s.mirnaId),
+      16,
+      utr5Seq,
+      cdsSeq
     );
-  }, [result]);
+  }, [result, utr5Seq, cdsSeq]);
 
   return (
-    <div className="px-3 py-5 sm:px-6 sm:py-6 lg:p-8 max-w-[1600px]">
+    <div className="px-3 py-5 sm:px-6 sm:py-6 lg:p-8 max-w-[1800px]">
       {/* Header */}
       <div className="mb-5 sm:mb-6 lg:mb-8 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         <div>
@@ -98,17 +154,18 @@ export default function HomePage() {
       )}
 
       {data && (
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 sm:gap-6 lg:gap-8 items-start">
-          {/* Left sidebar */}
-          <aside className="flex flex-col gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_480px] gap-4 sm:gap-6 lg:gap-8 items-start">
+          {/* Column 1: Selection & Controls */}
+          <aside className="flex flex-col gap-4 sm:gap-6 lg:sticky lg:top-8 max-h-[calc(100vh-4rem)] overflow-y-auto pr-1">
             <section
-              className="rounded-xl border p-4 sm:p-5"
+              className="rounded-xl border p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md"
               style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
             >
               <h2
-                className="text-sm font-semibold mb-3 sm:mb-4"
+                className="text-sm font-semibold mb-3 sm:mb-4 flex items-center gap-2"
                 style={{ color: "var(--text-primary)" }}
               >
+                <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
                 Cell type selection
               </h2>
               <CellTypeSelector
@@ -121,73 +178,41 @@ export default function HomePage() {
             </section>
 
             <section
-              className="rounded-xl border p-5"
+              className="rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md"
               style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
             >
               <h2
-                className="text-sm font-semibold mb-4"
+                className="text-sm font-semibold mb-4 flex items-center gap-2"
                 style={{ color: "var(--text-primary)" }}
               >
-                Algorithm parameters
+                <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
+                Construct design
               </h2>
               <ParameterControls
                 targetThreshold={targetThreshold}
                 coverThreshold={coverThreshold}
                 maxMirnas={maxMirnas}
+                utr5Seq={utr5Seq}
+                cdsSeq={cdsSeq}
+                geneSymbol={geneSymbol}
+                fetchingCds={fetchingCds}
+                optimizationMode={optimizationMode}
+                optimizing={optimizing}
                 onTargetThresholdChange={setTargetThreshold}
                 onCoverThresholdChange={setCoverThreshold}
                 onMaxMirnasChange={setMaxMirnas}
+                onUtr5SeqChange={setUtr5Seq}
+                onCdsSeqChange={setCdsSeq}
+                onGeneSymbolChange={setGeneSymbol}
+                onFetchCds={handleFetchCds}
+                onOptimizationModeChange={setOptimizationMode}
+                onRunOptimization={handleRunOptimization}
               />
-            </section>
-
-            <section
-              className="rounded-xl border p-4 text-xs space-y-3"
-              style={{
-                background: "var(--bg-raised)",
-                borderColor: "var(--border)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>How it works</p>
-              <p>
-                Select <span style={{ color: "var(--red)" }}>target</span> cell types
-                (to protect — miRNAs must be silent here) and{" "}
-                <span style={{ color: "var(--primary)" }}>off-target</span> cell types
-                (to suppress).
-              </p>
-              <p>
-                The greedy set-cover algorithm finds the fewest miRNAs that collectively
-                silence every off-target while remaining below the threshold in all targets.
-                The resulting 3&apos;UTR contains bulged binding sites for the
-                selected miRNAs.
-              </p>
-
-              <div style={{ borderTop: "1px solid var(--border)" }} className="pt-3">
-                <p className="font-medium mb-2" style={{ color: "var(--text-primary)" }}>Quick start</p>
-                <ol className="space-y-1.5 list-none">
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--red-bg)", color: "var(--red)" }}>1</span>
-                    <span>Switch to <span style={{ color: "var(--red)" }}>Targets</span> and click the cell types your therapeutic must spare.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--primary-bg)", color: "var(--primary)" }}>2</span>
-                    <span>Switch to <span style={{ color: "var(--primary)" }}>Off-targets</span> and select cell types to suppress — or use the quick-select button to add all remaining.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--bg-inset)", color: "var(--text-secondary)" }}>3</span>
-                    <span>Tune the thresholds and max miRNAs if needed. Results update automatically.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--bg-inset)", color: "var(--text-secondary)" }}>4</span>
-                    <span>Review the 3&apos;UTR sequence and structure plots on the right.</span>
-                  </li>
-                </ol>
-              </div>
             </section>
           </aside>
 
-          {/* Right panel */}
-          <div className="flex flex-col gap-4 sm:gap-6">
+          {/* Column 2: Expression & miRNA Discovery */}
+          <div className="flex flex-col gap-4 sm:gap-6 min-w-0">
             {targets.length === 0 || offTargets.length === 0 ? (
               <div
                 className="flex flex-col items-center justify-center h-48 sm:h-64 rounded-xl border border-dashed px-4 text-center"
@@ -202,14 +227,20 @@ export default function HomePage() {
               <>
                 {/* Expression chart — first */}
                 <section
-                  className="rounded-xl border p-4 sm:p-5"
+                  className="rounded-xl border p-4 sm:p-5 shadow-sm"
                   style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
                 >
                   <h2
-                    className="text-sm font-semibold mb-3 sm:mb-4"
+                    className="text-sm font-semibold mb-3 sm:mb-4 flex items-center justify-between"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    Target expression across cell types
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
+                      Differential expression
+                    </div>
+                    <span className="text-[10px] font-mono text-[var(--text-tertiary)] bg-[var(--bg-inset)] px-2 py-0.5 rounded">
+                      Top candidates
+                    </span>
                   </h2>
                   <MirnaChart
                     data={data}
@@ -221,46 +252,68 @@ export default function HomePage() {
 
                 {/* Selected targets table */}
                 <section
-                  className="rounded-xl border p-4 sm:p-5"
+                  className="rounded-xl border p-4 sm:p-5 shadow-sm"
                   style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
                 >
                   <h2
-                    className="text-sm font-semibold mb-3 sm:mb-4"
+                    className="text-sm font-semibold mb-3 sm:mb-4 flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    Selected targets
+                    <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
+                    miRNA sponge logic
                   </h2>
                   <ResultsTable result={result} targets={targets} />
                 </section>
 
-                {/* 3'UTR sequence */}
-                {design && (
-                  <section
-                    className="rounded-xl border p-4 sm:p-5"
-                    style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-                  >
-                    <h2
-                      className="text-sm font-semibold mb-3 sm:mb-4"
-                      style={{ color: "var(--text-primary)" }}
+                {/* Mobile views for sequence/structure */}
+                <div className="xl:hidden flex flex-col gap-4 sm:gap-6">
+                  {design && (
+                    <section
+                      className="rounded-xl border p-4 sm:p-5"
+                      style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
                     >
-                      3&apos;UTR sequence
-                    </h2>
-                    <SequencePanel design={design} />
-                  </section>
-                )}
-
-                {/* Structure visualisations (client-side) */}
-                {design && (
-                  <StructurePlots
-                    design={design}
-                    mirnaNames={result.steps
-                      .filter((s) => s.matureSeq.length > 0)
-                      .map((s) => s.mirnaId)}
-                  />
-                )}
+                      <h2 className="text-sm font-semibold mb-3 sm:mb-4" style={{ color: "var(--text-primary)" }}>Construct sequence</h2>
+                      <SequencePanel design={design} />
+                    </section>
+                  )}
+                  {design && (
+                    <StructurePlots
+                      design={design}
+                      mirnaNames={result.steps.filter((s) => s.matureSeq.length > 0).map((s) => s.mirnaId)}
+                    />
+                  )}
+                </div>
               </>
             ) : null}
           </div>
+
+          {/* Column 3: Sequence & Folding (Desktop Sticky) */}
+          <aside className="hidden xl:flex flex-col gap-4 sm:gap-6 lg:sticky lg:top-8 max-h-[calc(100vh-4rem)] overflow-y-auto pr-1 custom-scrollbar">
+            {design && (
+              <>
+                <section
+                  className="rounded-xl border p-4 sm:p-5 shadow-sm"
+                  style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+                >
+                  <h2
+                    className="text-sm font-semibold mb-3 sm:mb-4 flex items-center gap-2"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    <div className="w-1 h-4 bg-[var(--primary)] rounded-full" />
+                    mRNA sequence
+                  </h2>
+                  <SequencePanel design={design} />
+                </section>
+
+                <StructurePlots
+                  design={design}
+                  mirnaNames={result.steps
+                    .filter((s) => s.matureSeq.length > 0)
+                    .map((s) => s.mirnaId)}
+                />
+              </>
+            )}
+          </aside>
         </div>
       )}
     </div>

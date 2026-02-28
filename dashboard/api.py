@@ -1,8 +1,9 @@
 """
-FastAPI server for mRNA structure visualisation.
+FastAPI server for mRNA structure visualisation and optimisation.
 
 Wraps the plotting functions from plot_secondary_structure.py to serve
-1-D linear maps and 2-D secondary-structure plots as SVG over HTTP.
+1-D linear maps and 2-D secondary-structure plots as SVG over HTTP,
+and exposes the GA optimisation pipeline.
 
 Run:
     uv run uvicorn dashboard.api:app --port 8000
@@ -14,8 +15,9 @@ import io
 import re
 import sys
 import tempfile
+import traceback
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Optional
 
 import matplotlib
 matplotlib.use("Agg")
@@ -33,9 +35,21 @@ from plot_secondary_structure import (
     _fold_mfe,
     _plot_structure_naview,
     PlotStyle,
+    plot_mrna_construct,
+    predict_and_plot_full_and_utrs,
 )
 
-app = FastAPI(title="Chain of Custody – Structure API")
+# Import CDS lookup and Optimisation logic
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from chainofcustody.cds import get_canonical_cds, GeneNotFoundError
+    from chainofcustody.dashboard_api.api import optimize_and_plot
+except ImportError:
+    get_canonical_cds = None
+    GeneNotFoundError = Exception
+    optimize_and_plot = None
+
+app = FastAPI(title="Chain of Custody – Structure & Optimisation API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,7 +61,7 @@ app.add_middleware(
 # Distinguishable colours for sponge sites, one per unique miRNA.
 SITE_PALETTE = [
     "#6ee7b7", "#93c5fd", "#fca5a5", "#fde68a",
-    "#c4b5fd", "#fdba74", "#67e8f9", "#f9a8d4",
+    "#c4b5fd", "#fdba74", "#67e88c", "#f9a8d4",
     "#a5f3fc", "#d9f99d", "#e9d5ff", "#fecdd3",
 ]
 SPACER_COLOR = "#475569"
@@ -66,7 +80,9 @@ def _detect_sites(seq: str) -> list[tuple[int, int, int]]:
 
 
 class FoldRequest(BaseModel):
-    sequence: str
+    utr5: str = ""
+    cds: str = ""
+    utr3: str
     mirna_names: list[str] | None = None
 
 
@@ -77,6 +93,21 @@ class FoldResponse(BaseModel):
     mfe: float | None = None
 
 
+class GeneCdsResponse(BaseModel):
+    ok: bool
+    gene: str
+    cds: str = ""
+    error: str = ""
+
+
+class OptimizeRequest(BaseModel):
+    gene: str
+    target_cell_type: str = "Dendritic_cell"
+    utr5_min: int = 20
+    utr5_max: int = 150
+    n_gen: int = 10
+
+
 def _fig_to_svg(fig: plt.Figure) -> str:
     buf = io.BytesIO()
     fig.savefig(buf, format="svg", bbox_inches="tight", transparent=True)
@@ -85,162 +116,57 @@ def _fig_to_svg(fig: plt.Figure) -> str:
     return buf.read().decode("utf-8")
 
 
-# ── 1-D: based on teammate's plot_mrna_construct ──────────────────────
-# Follows the same structure but adapted for cassette-only view
-# (no 5'UTR / CDS) and with per-miRNA site colours + legend.
+# ── 2-D: uses teammate's _plot_structure_naview directly ──────────────
 
-def _plot_1d(
+def _plot_2d_custom(
+    seq_5utr: str,
+    seq_cds: str,
     seq_3utr: str,
     mirna_names: Sequence[str] | None = None,
-) -> plt.Figure:
-    total_len = len(seq_3utr)
+) -> tuple[plt.Figure, str, float]:
+    """
+    Renders 2D secondary structure using predict_and_plot_full_and_utrs logic.
+    """
+    full_seq = _clean_rna(seq_5utr + seq_cds + seq_3utr)
+    n5, ncds = len(seq_5utr), len(seq_cds)
+    n_full = len(full_seq)
+    
+    # Fold
+    structure, mfe = _fold_mfe(full_seq, temperature_c=37.0)
+    
+    # Build per-nucleotide colour array
+    nt_colors = [SPACER_COLOR] * n_full
+    for i in range(n5): nt_colors[i] = "#4A8DAD"
+    for i in range(n5, n5 + ncds): nt_colors[i] = "#3D6880"
+    for i in range(n5 + ncds, n_full): nt_colors[i] = "#D4635A"
+
     cmap = _site_color_map(mirna_names)
     sites = _detect_sites(seq_3utr)
-
-    fig, ax = plt.subplots(figsize=(18, 5))
-    fig.patch.set_alpha(0.0)
-    ax.set_facecolor("none")
-    ax.set_xlim(-total_len * 0.05, total_len * 1.05)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-
-    # Backbone (same as teammate)
-    ax.plot([0, total_len], [0.4, 0.4], color="white", linewidth=2)
-
-    # 3'UTR domain block (teammate draws all three; we only have this one)
-    rect = patches.Rectangle(
-        (0, 0.3), total_len, 0.2,
-        facecolor="lightcoral", edgecolor="white", alpha=0.35, zorder=2,
-    )
-    ax.add_patch(rect)
-    ax.text(
-        total_len / 2, 0.55, "3\u2032 UTR",
-        ha="center", va="bottom", fontsize=12, fontweight="bold", color="white",
-    )
-
-    # Detect and label sponge sites — same regex as teammate's code
-    site_counter = 0
-    for match in re.finditer(r"[A-Z]{15,30}", seq_3utr):
-        site_start = match.start()
-        site_width = len(match.group())
-
-        # Per-miRNA colour instead of uniform gold
-        mirna_name = mirna_names[site_counter % len(mirna_names)] if mirna_names else None
-        color = cmap.get(mirna_name, "gold") if mirna_name else "gold"
-
-        site_rect = patches.Rectangle(
-            (site_start, 0.3), site_width, 0.2,
-            facecolor=color, edgecolor="white", linewidth=0.6, zorder=3,
-        )
-        ax.add_patch(site_rect)
-
-        # Label — same staggered approach as teammate
-        if mirna_names:
-            mirna_label = mirna_names[site_counter % len(mirna_names)]
-            label = f"{mirna_label} (#{site_counter + 1})"
-        else:
-            label = f"Site {site_counter + 1}"
-
-        y_text = 0.65 if site_counter % 2 == 0 else 0.85
-        ax.text(
-            site_start + site_width / 2, y_text, label,
-            ha="center", va="bottom", fontsize=8, rotation=45, color="white",
-        )
-        ax.plot(
-            [site_start + site_width / 2, site_start + site_width / 2],
-            [0.5, y_text - 0.02],
-            color="gray", lw=0.5, zorder=1,
-        )
-        site_counter += 1
-
-    # Legend — coloured patches for each miRNA
-    if mirna_names:
-        unique = list(dict.fromkeys(mirna_names))
-        handles = [
-            patches.Patch(facecolor=cmap[n], edgecolor="white", linewidth=0.5, label=n)
-            for n in unique
-        ]
-        handles.append(patches.Patch(facecolor="lightcoral", alpha=0.35, edgecolor="white", linewidth=0.5, label="Spacer"))
-        leg = ax.legend(
-            handles=handles, loc="lower center",
-            ncol=min(len(handles), 5), fontsize=8,
-            frameon=True, facecolor="#1e293b", edgecolor="#334155",
-            labelcolor="white", bbox_to_anchor=(0.5, -0.04),
-        )
-        leg.get_frame().set_alpha(0.85)
-
-    ax.set_title(
-        f"3\u2032UTR Cassette  |  {total_len} nt  |  {site_counter} binding sites",
-        fontsize=14, pad=20, color="white",
-    )
-    plt.tight_layout()
-    return fig
-
-
-# ── 2-D: uses teammate's _plot_structure_naview directly ──────────────
-# Only change: colour function maps nucleotides by sponge site identity
-# instead of by base (A/U/G/C), plus transparent background and legend.
-
-def _plot_2d(
-    seq: str,
-    structure: str,
-    mfe: float,
-    original_seq: str,
-    mirna_names: Sequence[str] | None = None,
-) -> plt.Figure:
-    n = len(seq)
-    cmap = _site_color_map(mirna_names)
-    sites = _detect_sites(original_seq)
-
-    # Build per-nucleotide colour array: site colour or spacer grey
-    nt_colors = [SPACER_COLOR] * n
     for start, end, idx in sites:
         name = mirna_names[idx % len(mirna_names)] if mirna_names else None
         color = cmap.get(name, "gold") if name else "gold"
-        for pos in range(start, min(end, n)):
+        for pos in range(n5 + ncds + start, min(n5 + ncds + end, n_full)):
             nt_colors[pos] = color
 
-    # Use teammate's _plot_structure_naview with custom colour function
+    import RNA
+    from plot_secondary_structure import _extract_xy, _dist, PlotStyle
+
     style = PlotStyle(
-        node_size=8.0,
-        backbone_width=0.9,
-        pair_width=0.8,
+        max_pair_span=250,
+        backbone_max_dist=15.0,
+        node_size=6.0,
+        backbone_width=0.7,
+        pair_width=0.6,
         backbone_alpha=0.3,
-        pair_alpha=0.5,
+        pair_alpha=0.6,
         backbone_color="#64748b",
         pair_color="#94a3b8",
-        figsize=(10.0, 10.0),
+        figsize=(12, 12),
     )
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        color_func = lambda i: nt_colors[i - 1]
-
-        files = _plot_structure_naview(
-            seq=seq,
-            structure=structure,
-            title=f"3\u2032UTR Secondary Structure  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
-            out_prefix="structure_2d",
-            out_dir=Path(tmpdir),
-            color_func=color_func,
-            style=style,
-            save_png=False,
-            save_svg=True,
-            show=False,
-        )
-
-        # Read the SVG, then patch in transparent background and legend
-        with open(files["svg"]) as f:
-            svg_raw = f.read()
-
-    # The teammate's function saves to file with white bg. We need to
-    # re-render with transparent bg and a legend, so we re-plot using
-    # the same approach but return the figure directly.
-    import RNA
-    from plot_secondary_structure import _extract_xy, _dist
 
     pt = RNA.ptable(structure)
     coords = RNA.naview_xy_coordinates(structure)
-    x, y = _extract_xy(coords, n)
+    x, y = _extract_xy(coords, n_full)
 
     fig, ax = plt.subplots(figsize=style.figsize)
     fig.patch.set_alpha(0.0)
@@ -249,9 +175,9 @@ def _plot_2d(
     ax.set_axis_off()
 
     # Backbone
-    for i in range(1, n):
+    for i in range(1, n_full):
         d = _dist(x[i], y[i], x[i + 1], y[i + 1])
-        if d > 15.0:
+        if style.backbone_max_dist and d > style.backbone_max_dist:
             continue
         ax.plot(
             [x[i], x[i + 1]], [y[i], y[i + 1]],
@@ -260,9 +186,11 @@ def _plot_2d(
         )
 
     # Base pairs
-    for i in range(1, n + 1):
+    for i in range(1, n_full + 1):
         j = int(pt[i])
         if j > i:
+            if style.max_pair_span and abs(j - i) > style.max_pair_span:
+                continue
             ax.plot(
                 [x[i], x[j]], [y[i], y[j]],
                 linewidth=style.pair_width, alpha=style.pair_alpha,
@@ -271,49 +199,65 @@ def _plot_2d(
 
     # Nucleotide dots
     ax.scatter(
-        [x[i] for i in range(1, n + 1)],
-        [y[i] for i in range(1, n + 1)],
+        [x[i] for i in range(1, n_full + 1)],
+        [y[i] for i in range(1, n_full + 1)],
         s=style.node_size,
-        c=[nt_colors[i - 1] for i in range(1, n + 1)],
+        c=[nt_colors[i - 1] for i in range(1, n_full + 1)],
         zorder=3, edgecolors="none",
     )
 
     # Legend
+    handles = [
+        patches.Patch(facecolor="#4A8DAD", label="5' UTR"),
+        patches.Patch(facecolor="#3D6880", label="CDS"),
+        patches.Patch(facecolor="#D4635A", label="3' UTR"),
+    ]
     if mirna_names:
         unique = list(dict.fromkeys(mirna_names))
-        handles = [
-            patches.Patch(facecolor=cmap[n], edgecolor="none", label=n)
-            for n in unique
-        ]
-        handles.append(patches.Patch(facecolor=SPACER_COLOR, edgecolor="none", label="Spacer"))
-        leg = ax.legend(
-            handles=handles, loc="lower right", fontsize=8,
-            frameon=True, facecolor="#1e293b", edgecolor="#334155",
-            labelcolor="white",
-        )
-        leg.get_frame().set_alpha(0.85)
+        for n in unique:
+            handles.append(patches.Patch(facecolor=cmap[n], label=n))
+            
+    leg = ax.legend(
+        handles=handles, loc="lower right", fontsize=8,
+        frameon=True, facecolor="#1e293b", edgecolor="#334155",
+        labelcolor="white", ncol=2 if len(handles) > 6 else 1
+    )
+    leg.get_frame().set_alpha(0.85)
 
     ax.set_title(
-        f"3\u2032UTR Secondary Structure  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
-        fontsize=13, color="white", pad=12,
+        f"mRNA Secondary Structure  |  MFE = {mfe:.2f} kcal/mol  |  {n_full} nt",
+        fontsize=14, color="white", pad=12,
     )
     plt.tight_layout()
-    return fig
+    return fig, structure, mfe
 
 
 @app.post("/api/fold")
 def fold(req: FoldRequest) -> FoldResponse:
-    seq = _clean_rna(req.sequence)
-
-    # 1-D linear map
-    fig_1d = _plot_1d(seq_3utr=req.sequence, mirna_names=req.mirna_names)
+    # 1-D linear map (Full Gene)
+    fig_1d = plot_mrna_construct(
+        seq_5utr=req.utr5,
+        seq_cds=req.cds,
+        seq_3utr=req.utr3,
+        mirna_names=req.mirna_names,
+        show=False
+    )
+    # Fix 1D colors for dark mode dashboard
+    for text in fig_1d.findobj(matplotlib.text.Text):
+        text.set_color("white")
+    for patch in fig_1d.findobj(patches.Rectangle):
+        patch.set_edgecolor("white")
+    fig_1d.patch.set_alpha(0.0)
+    fig_1d.gca().set_facecolor("none")
+    
     svg_1d = _fig_to_svg(fig_1d)
 
     # 2-D secondary structure
-    structure, mfe = _fold_mfe(seq, temperature_c=37.0)
-    fig_2d = _plot_2d(
-        seq=seq, structure=structure, mfe=mfe,
-        original_seq=req.sequence, mirna_names=req.mirna_names,
+    fig_2d, structure, mfe = _plot_2d_custom(
+        seq_5utr=req.utr5,
+        seq_cds=req.cds,
+        seq_3utr=req.utr3,
+        mirna_names=req.mirna_names
     )
     svg_2d = _fig_to_svg(fig_2d)
 
@@ -323,3 +267,34 @@ def fold(req: FoldRequest) -> FoldResponse:
         dot_bracket=structure,
         mfe=mfe,
     )
+
+
+@app.get("/api/gene-cds/{gene_symbol}")
+def get_cds(gene_symbol: str) -> GeneCdsResponse:
+    if get_canonical_cds is None:
+        return GeneCdsResponse(ok=False, gene=gene_symbol, error="CDS lookup module not available")
+    try:
+        cds = get_canonical_cds(gene_symbol)
+        cds_rna = cds.replace("T", "U")
+        return GeneCdsResponse(ok=True, gene=gene_symbol, cds=cds_rna)
+    except GeneNotFoundError as e:
+        return GeneCdsResponse(ok=False, gene=gene_symbol, error=str(e))
+    except Exception as e:
+        return GeneCdsResponse(ok=False, gene=gene_symbol, error=f"Internal error: {str(e)}")
+
+
+@app.post("/api/optimize")
+def optimize(req: OptimizeRequest):
+    if optimize_and_plot is None:
+        return {"ok": False, "error": "Optimisation module not available"}
+    try:
+        result = optimize_and_plot(
+            gene=req.gene,
+            target_cell_type=req.target_cell_type,
+            utr5_min=req.utr5_min,
+            utr5_max=req.utr5_max,
+            n_gen=req.n_gen
+        )
+        return result
+    except Exception as e:
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
