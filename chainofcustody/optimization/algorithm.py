@@ -123,8 +123,8 @@ def run(
     from chainofcustody.progress import update_status  # noqa: PLC0415
     update_status("loading RiboNN models into GPU…")
     from chainofcustody.evaluation.ribonn import get_predictor  # noqa: PLC0415
-    get_predictor()  # warm up — loads all 50 models once before timing starts
-    update_status("RiboNN ready")
+    get_predictor()
+    update_status("models ready")
 
     minimize_kwargs = dict(
         termination=("n_gen", n_gen),

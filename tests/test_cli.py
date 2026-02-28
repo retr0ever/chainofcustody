@@ -53,7 +53,7 @@ def mock_optimize_run(mocker):
 
 @pytest.fixture
 def mock_scoring(mocker):
-    """Mock the evaluation pipeline so optimize tests don't need ViennaRNA etc."""
+    """Mock the evaluation pipeline so optimize tests don't need DRfold2/RiboNN."""
     mock_report = {
         "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
         "structure_scores": {"utr5_accessibility": {"mfe": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},

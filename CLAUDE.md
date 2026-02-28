@@ -111,5 +111,5 @@ fitness = compute_fitness(report)
 
 ## Dependencies requiring system install
 
-- **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Install via conda or system package manager if pip install fails.
+- **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Installed automatically via `uv sync`.
 - **RiboNN**: Translation efficiency prediction. Bundled as a git submodule at `vendor/RiboNN`. Initialise with `git submodule update --init vendor/RiboNN`. Requires PyTorch (already in the venv).

@@ -64,8 +64,9 @@ class SequenceProblem(Problem):
     metrics. Lower = better (pymoo minimises).
 
     Inherits from ``Problem`` (vectorised) so that the whole population is
-    evaluated in a single call. RiboNN inference is therefore batched across
-    the entire population, keeping GPU utilisation high.
+    evaluated in a single call. RiboNN inference is batched across the entire
+    population, keeping GPU utilisation high. ViennaRNA folding runs in a
+    ThreadPoolExecutor (it releases the GIL, so threads scale well).
     """
 
     def __init__(self, utr5_min: int, utr5_max: int, cds: str, utr3: str, **kwargs) -> None:
@@ -115,21 +116,21 @@ class SequenceProblem(Problem):
                 mRNASequence(utr5=utr5 + KOZAK, cds=self.cds, utr3=self.utr3)
             )
 
-        # --- GPU: batch RiboNN inference for whole population ---
-        update_status(f"{gen_tag}  RiboNN  GPU inference ({n} seqs)")
+        # --- GPU: RiboNN batch inference ---
+        update_status(f"{gen_tag}  RiboNN GPU inference ({n} seqs)")
         try:
             ribonn_results = score_ribonn_batch(parsed_list)
         except Exception as exc:
             logger.warning("Batch RiboNN scoring failed: %s", exc)
             ribonn_results = [None] * n
 
-        # --- CPU: parallel structure + manufacturing + stability ---
-        update_status(f"{gen_tag}  ViennaRNA + scoring ({n} seqs, {_CPU_WORKERS} threads)")
+        # --- CPU: parallel ViennaRNA folding + manufacturing + stability ---
+        update_status(f"{gen_tag}  CPU scoring ({n} seqs, {_CPU_WORKERS} threads)")
 
         def _score_one(args: tuple[int, mRNASequence, dict | None]) -> tuple[int, np.ndarray]:
             idx, parsed, ribonn_scores = args
             try:
-                report = score_parsed(parsed, _ribonn_scores=ribonn_scores)
+                report = score_parsed(parsed, _ribonn_scores=ribonn_scores, _fast_fold=True)
                 fitness = compute_fitness(report)
                 f_row = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
             except Exception as exc:

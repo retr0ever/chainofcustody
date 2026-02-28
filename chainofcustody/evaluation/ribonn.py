@@ -13,6 +13,16 @@ Performance notes
 -----------------
 All 50 models (10 CV folds × 5 top models each) are loaded once into GPU
 memory by :class:`RiboNNPredictor` and reused for every subsequent call.
+
+The hot path in :meth:`RiboNNPredictor.predict_batch` bypasses the
+``RiboNNDataModule`` / ``DataFrameDataset`` entirely.  The original
+``DataFrameDataset.__getitem__`` builds one-hot tensors with Python for-loops
+over individual nucleotide characters — O(sequence_length) Python iterations
+per sample, completely unvectorized.  Instead we use
+:func:`_encode_sequences_vectorized` which encodes the whole batch in one
+numpy operation on a pre-allocated ``(N, C, L)`` array, then pins and
+transfers it to GPU as a single ``torch.Tensor``.
+
 Use :func:`score_ribonn_batch` during optimisation to score a whole
 population in a single GPU pass; :func:`score_ribonn` is a thin wrapper for
 single-sequence use (CLI / evaluation).
@@ -21,12 +31,8 @@ single-sequence use (CLI / evaluation).
 from __future__ import annotations
 
 import contextlib
-import os
 import sys
-import tempfile
-import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -35,16 +41,27 @@ import torch
 from chainofcustody.sequence import mRNASequence
 from chainofcustody.progress import update_status
 
-if TYPE_CHECKING:
-    pass
-
 # Path to the RiboNN submodule, relative to this file:
 #   chainofcustody/evaluation/ribonn.py  →  parents[2] = repo root
 _RIBONN_DIR = Path(__file__).parents[2] / "vendor" / "RiboNN"
 
 _SPECIES = "human"
 _TOP_K = 5
-_BATCH_SIZE = 512
+
+# Sequence length limits used when training the human model (from config)
+_MAX_UTR5_LEN = 1_381
+_MAX_CDS_UTR3_LEN = 11_937
+_PADDED_LEN = _MAX_UTR5_LEN + _MAX_CDS_UTR3_LEN  # 13 318
+
+# RiboNN uses DNA internally (U→T at ingestion).
+# Channel layout for the human model (pad_5_prime=True,
+# split_utr5_cds_utr3_channels=False, label_codons=True, all others False):
+#   ch 0-3: one-hot A/T/C/G, right-padded so start codon aligns at _MAX_UTR5_LEN
+#   ch 4:   codon-start mask (1 at first nt of every CDS codon)
+_N_CHANNELS = 5
+
+# Map nucleotide → channel index (DNA alphabet; U treated as T)
+_NT_INDEX: dict[str, int] = {"A": 0, "T": 1, "U": 1, "C": 2, "G": 3}
 
 
 def _ensure_importable() -> None:
@@ -62,20 +79,73 @@ def _te_status(mean_te: float) -> str:
     return "RED"
 
 
+def _encode_sequences_vectorized(
+    sequences: list[mRNASequence],
+) -> tuple[torch.Tensor, list[bool]]:
+    """Encode a batch of mRNA sequences into the RiboNN input tensor format.
+
+    Builds a ``(N, 5, 13318)`` float32 tensor on CPU using vectorized numpy
+    operations, then returns it as a pinned-memory tensor ready for GPU
+    transfer.  Sequences that exceed the model's length limits are skipped;
+    their slot is left as zeros and ``valid[i]`` is set to ``False``.
+
+    Returns
+    -------
+    tensor : torch.Tensor  shape (N, 5, 13318), pinned
+    valid  : list[bool]     True for sequences that were encoded
+    """
+    n = len(sequences)
+    # Pre-allocate on CPU as a numpy array; fill in-place per sequence
+    arr = np.zeros((n, _N_CHANNELS, _PADDED_LEN), dtype=np.float32)
+    valid = [False] * n
+
+    for i, seq in enumerate(sequences):
+        # RiboNN expects DNA (U→T already handled via _NT_INDEX mapping)
+        utr5 = seq.utr5
+        cds = seq.cds
+        utr3 = seq.utr3
+
+        utr5_len = len(utr5)
+        cds_len = len(cds)
+        cds_utr3_len = cds_len + len(utr3)
+        tx_len = utr5_len + cds_utr3_len
+
+        if utr5_len > _MAX_UTR5_LEN or cds_utr3_len > _MAX_CDS_UTR3_LEN:
+            continue  # leave valid[i] = False
+
+        # Full transcript as a numpy char array
+        tx = np.frombuffer((utr5 + cds + utr3).encode(), dtype=np.uint8)
+
+        # One-hot: map each character to its channel index via a lookup table
+        lut = np.zeros(256, dtype=np.int8)
+        for ch, idx in _NT_INDEX.items():
+            lut[ord(ch)] = idx
+        nt_channels = lut[tx]  # shape (tx_len,)
+
+        # Position in the padded tensor: UTR5 is right-aligned to _MAX_UTR5_LEN
+        pad_offset = _MAX_UTR5_LEN - utr5_len  # start position in padded axis
+        positions = np.arange(tx_len, dtype=np.int32) + pad_offset
+
+        # Scatter one-hot values using advanced indexing
+        arr[i, nt_channels, positions] = 1.0
+
+        # Codon-start mask (channel 4): every 3rd position starting at CDS start
+        cds_start = _MAX_UTR5_LEN  # aligned after padding
+        codon_positions = np.arange(cds_start, cds_start + cds_len - 3 + 1, 3)
+        arr[i, 4, codon_positions] = 1.0
+
+        valid[i] = True
+
+    # Pin memory for faster CPU→GPU transfer
+    tensor = torch.from_numpy(arr).pin_memory()
+    return tensor, valid
+
+
 class RiboNNPredictor:
     """Holds all CV models in GPU memory for fast repeated inference.
 
     Use the module-level :func:`get_predictor` to obtain the shared singleton
     rather than instantiating this class directly.
-
-    Parameters
-    ----------
-    ribonn_dir:
-        Path to the ``vendor/RiboNN`` submodule root.
-    species:
-        ``"human"`` or ``"mouse"``.
-    top_k:
-        Number of top-ranked models to load per CV fold.
     """
 
     def __init__(
@@ -93,15 +163,15 @@ class RiboNNPredictor:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         run_df = pd.read_csv(ribonn_dir / "models" / species / "runs.csv")
-        self._config = extract_config(run_df, run_df.run_id[0])
-        self._config["species"] = species
-        self._config["max_utr5_len"] = 1_381
-        self._config["max_cds_utr3_len"] = 11_937
+        config = extract_config(run_df, run_df.run_id[0])
+        config["species"] = species
+        config["max_utr5_len"] = _MAX_UTR5_LEN
+        config["max_cds_utr3_len"] = _MAX_CDS_UTR3_LEN
 
-        # Build list of (fold, model_path) pairs, sorted by fold
         run_df_sorted = run_df.sort_values("metrics.val_r2", ascending=False)
         self._fold_models: list[tuple[int, list[torch.nn.Module]]] = []
         n_folds = len(run_df["params.test_fold"].unique())
+
         for fold_idx, fold in enumerate(np.sort(run_df["params.test_fold"].unique()), 1):
             update_status(
                 f"RiboNN  loading models  fold {fold_idx}/{n_folds}  "
@@ -115,7 +185,7 @@ class RiboNNPredictor:
             models = []
             with contextlib.chdir(ribonn_dir):
                 for run_id in sub_df.run_id:
-                    model = RiboNN(**self._config)
+                    model = RiboNN(**config)
                     state = torch.load(
                         f"models/{species}/{run_id}/state_dict.pth",
                         map_location=self.device,
@@ -127,16 +197,10 @@ class RiboNNPredictor:
 
             self._fold_models.append((int(fold), models))
 
-        # Derive predicted column names from one fold
         self._predicted_cols = self._get_predicted_cols()
+        update_status("RiboNN  ready")
 
     def _get_predicted_cols(self) -> list[str]:
-        """Return the list of predicted_TE_* column names for this species."""
-        _ensure_importable()
-        from src.predict import predict_using_models_trained_in_one_fold  # noqa: PLC0415  # noqa: F401
-
-        # Column names are derived from the species constant inside predict.py.
-        # Re-derive them here without running inference.
         human_cols = (
             "TE_108T,TE_12T,TE_A2780,TE_A549,TE_BJ,TE_BRx.142,TE_C643,TE_CRL.1634,"
             "TE_Calu.3,TE_Cybrid_Cells,TE_H1.hESC,TE_H1933,TE_H9.hESC,TE_HAP.1,"
@@ -180,77 +244,40 @@ class RiboNNPredictor:
         return [c.replace("TE_", "predicted_TE_") for c in cols.split(",")]
 
     def predict_batch(self, sequences: list[mRNASequence]) -> list[dict]:
-        """Score a batch of sequences.  Returns one result dict per sequence.
+        """Score a batch of sequences in one GPU pass.
 
-        Each dict has keys ``mean_te``, ``per_tissue``, ``status``, ``message``.
-        Sequences that exceed RiboNN's length limits are returned with
-        ``mean_te=0.0`` and ``status="RED"``.
+        Encodes the whole batch with vectorized numpy (bypassing the slow
+        per-character Python loop in ``DataFrameDataset.__getitem__``), then
+        runs a single forward pass per model with the full batch on GPU.
+
+        Returns one result dict per input sequence.
         """
-        _ensure_importable()
-        from src.data import RiboNNDataModule  # noqa: PLC0415
+        n = len(sequences)
 
-        rows = [
-            {
-                "tx_id": str(i),
-                "utr5_sequence": seq.utr5,
-                "cds_sequence": seq.cds,
-                "utr3_sequence": seq.utr3,
-            }
-            for i, seq in enumerate(sequences)
-        ]
-        input_df = pd.DataFrame(rows)
+        # Vectorized CPU encoding → pinned tensor
+        batch_tensor, valid = _encode_sequences_vectorized(sequences)
+        # Move the whole batch to GPU once
+        batch_gpu = batch_tensor.to(self.device, non_blocking=True)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=True
-        ) as fh:
-            input_df.to_csv(fh, sep="\t", index=False)
-            fh.flush()
-            input_path = fh.name
+        # --- Run all 50 models (10 folds × 5 top-k) ---
+        all_fold_preds: list[np.ndarray] = []
+        for _fold, models in self._fold_models:
+            fold_model_preds: list[np.ndarray] = []
+            for model in models:
+                with torch.no_grad():
+                    out = model(batch_gpu).cpu().numpy()  # (N, n_tissues)
+                fold_model_preds.append(out)
+            all_fold_preds.append(np.stack(fold_model_preds).mean(axis=0))
 
-            config = dict(self._config)
-            config["tx_info_path"] = input_path
-            config["num_workers"] = 0
-            config["test_batch_size"] = _BATCH_SIZE
-            config["remove_extreme_txs"] = False
-            config["target_column_pattern"] = None
-
-            with contextlib.chdir(self._ribonn_dir), \
-                 warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="'pin_memory' argument is set as true but not supported on MPS",
-                    category=UserWarning,
-                )
-                dm = RiboNNDataModule(config)
-                dataloader = dm.predict_dataloader()
-
-                all_fold_preds: list[np.ndarray] = []
-                for _fold, models in self._fold_models:
-                    fold_model_preds: list[np.ndarray] = []
-                    for model in models:
-                        with torch.no_grad():
-                            batches = [
-                                model(batch.to(self.device))
-                                for batch in dataloader
-                            ]
-                        preds = torch.cat(batches, dim=0).cpu().numpy()
-                        fold_model_preds.append(preds)
-                    # Average across the top-k models in this fold
-                    all_fold_preds.append(np.stack(fold_model_preds).mean(axis=0))
-
-        # Average across folds: shape (n_sequences, n_tissues)
+        # Average across folds: (N, n_tissues)
         mean_preds = np.stack(all_fold_preds).mean(axis=0)
 
-        # Map back — dm.df may have been filtered; align by tx_id
-        valid_ids = set(dm.df["tx_id"].astype(str))
-        pred_idx = 0
         results: list[dict] = []
-        for i in range(len(sequences)):
-            if str(i) not in valid_ids:
+        for i in range(n):
+            if not valid[i]:
                 results.append(_null_result())
                 continue
-            tissue_preds = mean_preds[pred_idx]
-            pred_idx += 1
+            tissue_preds = mean_preds[i]
             mean_te = float(tissue_preds.mean())
             per_tissue = {
                 col.removeprefix("predicted_TE_"): round(float(v), 4)
@@ -289,9 +316,6 @@ def score_ribonn(parsed: mRNASequence) -> dict:
     """Predict translation efficiency for a single sequence using RiboNN.
 
     Loads models on first call; subsequent calls reuse cached GPU models.
-
-    Returns a dict with keys: ``mean_te``, ``per_tissue``, ``status``,
-    ``message``.
     """
     return get_predictor().predict_batch([parsed])[0]
 
@@ -300,9 +324,8 @@ def score_ribonn_batch(sequences: list[mRNASequence]) -> list[dict]:
     """Predict translation efficiency for a list of sequences in one GPU pass.
 
     Significantly faster than calling :func:`score_ribonn` in a loop because
-    the whole population is forwarded through the cached GPU models together.
-
-    Returns one result dict per input sequence (same order).
+    the whole population is encoded and forwarded in a single vectorized
+    operation.
     """
     return get_predictor().predict_batch(sequences)
 
