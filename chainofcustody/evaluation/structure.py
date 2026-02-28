@@ -11,6 +11,29 @@ def fold_sequence(seq: str) -> tuple[str, float]:
     return structure, mfe
 
 
+def windowed_mfe_values(
+    seq: str,
+    window_size: int = 500,
+    step: int = 250,
+) -> list[float]:
+    """Fold a sequence in overlapping windows and return each window's MFE.
+
+    Used when the sequence is too long for a single O(n³) ViennaRNA fold.
+
+    Args:
+        seq: RNA sequence to fold.
+        window_size: Length of each folding window in nucleotides.
+        step: Stride between consecutive windows in nucleotides.
+
+    Returns:
+        List of MFE values (kcal/mol), one per window.
+    """
+    return [
+        fold_sequence(seq[i:i + window_size])[1]
+        for i in range(0, len(seq) - window_size + 1, step)
+    ]
+
+
 def check_utr5_accessibility(parsed: mRNASequence) -> dict:
     """
     Check if the 5'UTR is accessible for ribosome loading.
@@ -103,17 +126,9 @@ def compute_global_mfe(parsed: mRNASequence, max_length: int = 2000) -> dict:
         }
 
     # Window-based folding for long sequences
-    window_size = 500
-    step = 250
-    mfe_values = []
-
-    for i in range(0, len(seq) - window_size + 1, step):
-        window = seq[i:i + window_size]
-        _, window_mfe = fold_sequence(window)
-        mfe_values.append(window_mfe)
-
+    mfe_values = windowed_mfe_values(seq)
     avg_mfe = sum(mfe_values) / len(mfe_values) if mfe_values else 0
-    total_estimated_mfe = avg_mfe * (len(seq) / window_size)
+    total_estimated_mfe = avg_mfe * (len(seq) / 500)
 
     return {
         "mfe": round(total_estimated_mfe, 2),

@@ -2,9 +2,8 @@
 
 import re
 
-import RNA
-
 from chainofcustody.sequence import mRNASequence
+from chainofcustody.evaluation.structure import fold_sequence, windowed_mfe_values
 
 
 # AU-rich element motif (AUUUA pentamer)
@@ -31,21 +30,13 @@ def compute_mfe_per_nt(parsed: mRNASequence, max_length: int = 2000) -> float:
     seq = str(parsed)
 
     if len(seq) <= max_length:
-        _, mfe = RNA.fold(seq)
-        return mfe / len(seq) if len(seq) > 0 else 0.0
+        _, mfe = fold_sequence(seq)
+        return mfe / len(seq) if seq else 0.0
 
-    # Windowed folding
-    window_size = 500
-    step = 250
-    mfe_values = []
-    for i in range(0, len(seq) - window_size + 1, step):
-        _, w_mfe = RNA.fold(seq[i:i + window_size])
-        mfe_values.append(w_mfe)
-
+    mfe_values = windowed_mfe_values(seq)
     if not mfe_values:
         return 0.0
-    avg_mfe = sum(mfe_values) / len(mfe_values)
-    return avg_mfe / window_size
+    return sum(mfe_values) / len(mfe_values) / 500
 
 
 def count_au_rich_elements(parsed: mRNASequence) -> int:
