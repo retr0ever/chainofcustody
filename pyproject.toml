@@ -9,7 +9,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "dnachisel>=3.2.16",
     "matplotlib>=3.9.0",
     "mirmap>=2.0.0",
     "mygene>=3.2.2",
