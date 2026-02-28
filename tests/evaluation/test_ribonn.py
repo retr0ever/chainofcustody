@@ -1,12 +1,32 @@
-import subprocess
-
+import pandas as pd
 import pytest
 
 from chainofcustody.sequence import mRNASequence
-from chainofcustody.evaluation.ribonn import score_ribonn, _te_status, _parse_output, _RIBONN_DIR
-
+from chainofcustody.evaluation.ribonn import (
+    _RIBONN_DIR,
+    _aggregate,
+    _score_with_dir,
+    _te_status,
+    score_ribonn,
+)
 
 _PARSED = mRNASequence(utr5="AAAAAA", cds="AUGCCCAAGUAA", utr3="CCCGGG")
+
+
+def _mock_predictions(hela: float = 1.8, hepg2: float = 1.2, folds: int = 2) -> pd.DataFrame:
+    """Build a fake multi-fold predictions DataFrame like RiboNN returns."""
+    rows = []
+    for fold in range(folds):
+        rows.append({
+            "tx_id": "query",
+            "utr5_sequence": "AAAAAA",
+            "cds_sequence": "AUGCCCAAGUAA",
+            "utr3_sequence": "CCCGGG",
+            "predicted_TE_HeLa": hela,
+            "predicted_TE_HepG2": hepg2,
+            "fold": fold,
+        })
+    return pd.DataFrame(rows)
 
 
 # ── Submodule path ───────────────────────────────────────────────────────────
@@ -33,91 +53,80 @@ def test_te_status_red():
     assert _te_status(0.0) == "RED"
 
 
-# ── Subprocess mocking ───────────────────────────────────────────────────────
+# ── _aggregate (pure function) ───────────────────────────────────────────────
 
-def _fake_ribonn_dir(tmp_path):
-    """Create a minimal fake RiboNN directory layout."""
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("")
-    (tmp_path / "data").mkdir()
-    return tmp_path
-
-
-def test_successful_prediction(tmp_path, mocker):
-    ribonn_dir = _fake_ribonn_dir(tmp_path)
-
-    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="", stderr="",
-    ))
-
-    results_dir = ribonn_dir / "results" / "human"
-    results_dir.mkdir(parents=True)
-    (results_dir / "prediction_output.txt").write_text(
-        "tx_id\tutr5_sequence\tcds_sequence\tutr3_sequence\tpredicted_HeLa\tpredicted_HepG2\tmean_predicted_TE\n"
-        "query\tAAAAAA\tAUGCCCAAGUAA\tCCCGGG\t1.8\t1.2\t1.5\n"
-    )
-
-    result = score_ribonn.__wrapped__(_PARSED) if hasattr(score_ribonn, "__wrapped__") else \
-        __import__("chainofcustody.evaluation.ribonn", fromlist=["_run_ribonn"])._run_ribonn(_PARSED, ribonn_dir)
-
-    assert result["mean_te"] == 1.5
+def test_aggregate_mean_te():
+    df = _mock_predictions(hela=1.8, hepg2=1.2, folds=3)
+    result = _aggregate(df)
+    assert result["mean_te"] == pytest.approx(1.5, abs=1e-4)
     assert result["status"] == "GREEN"
-    assert result["per_tissue"]["HeLa"] == 1.8
-    assert result["per_tissue"]["HepG2"] == 1.2
+    assert "HeLa" in result["per_tissue"]
+    assert result["per_tissue"]["HeLa"] == pytest.approx(1.8)
+
+
+def test_aggregate_no_available_key():
+    result = _aggregate(_mock_predictions())
     assert "available" not in result
 
 
-def test_subprocess_failure_raises(tmp_path, mocker):
-    ribonn_dir = _fake_ribonn_dir(tmp_path)
-
-    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
-        args=[], returncode=1, stdout="", stderr="Model not found",
-    ))
-
-    import chainofcustody.evaluation.ribonn as mod
-    with pytest.raises(RuntimeError, match="RiboNN exited with code 1"):
-        mod._run_ribonn(_PARSED, ribonn_dir)
+def test_aggregate_tissue_names_stripped():
+    result = _aggregate(_mock_predictions())
+    assert all(not k.startswith("predicted_") for k in result["per_tissue"])
+    assert all(not k.startswith("TE_") for k in result["per_tissue"])
 
 
-def test_subprocess_timeout_propagates(tmp_path, mocker):
-    ribonn_dir = _fake_ribonn_dir(tmp_path)
+def test_aggregate_amber():
+    df = _mock_predictions(hela=1.1, hepg2=1.3)
+    assert _aggregate(df)["status"] == "AMBER"
 
-    mocker.patch(
-        "chainofcustody.evaluation.ribonn.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="python3", timeout=300),
+
+def test_aggregate_red():
+    df = _mock_predictions(hela=0.5, hepg2=0.8)
+    assert _aggregate(df)["status"] == "RED"
+
+
+# ── _score_with_dir (mocked prediction fn) ──────────────────────────────────
+
+def _fake_runs_csv(tmp_path: "Path") -> pd.DataFrame:
+    """Create a minimal runs.csv and return as DataFrame."""
+    runs = pd.DataFrame({"run_id": ["abc123"], "params.test_fold": [0]})
+    (tmp_path / "models" / "human").mkdir(parents=True)
+    runs.to_csv(tmp_path / "models" / "human" / "runs.csv", index=False)
+    return runs
+
+
+def test_score_with_dir_success(tmp_path, mocker):
+    _fake_runs_csv(tmp_path)
+
+    from chainofcustody.evaluation.ribonn import _ensure_importable
+    _ensure_importable()
+    import src.predict as src_predict
+
+    mocker.patch.object(
+        src_predict,
+        "predict_using_nested_cross_validation_models",
+        side_effect=lambda *a, **kw: _mock_predictions(),
     )
 
-    import chainofcustody.evaluation.ribonn as mod
-    with pytest.raises(subprocess.TimeoutExpired):
-        mod._run_ribonn(_PARSED, ribonn_dir)
+    result = _score_with_dir(_PARSED, tmp_path)
+
+    assert result["mean_te"] == pytest.approx(1.5, abs=1e-4)
+    assert result["status"] == "GREEN"
+    assert "available" not in result
 
 
-def test_missing_output_raises(tmp_path, mocker):
-    ribonn_dir = _fake_ribonn_dir(tmp_path)
+def test_score_with_dir_propagates_exception(tmp_path, mocker):
+    _fake_runs_csv(tmp_path)
 
-    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="", stderr="",
-    ))
+    from chainofcustody.evaluation.ribonn import _ensure_importable
+    _ensure_importable()
+    import src.predict as src_predict
 
-    import chainofcustody.evaluation.ribonn as mod
-    with pytest.raises(RuntimeError, match="output file not found"):
-        mod._run_ribonn(_PARSED, ribonn_dir)
+    mocker.patch.object(
+        src_predict,
+        "predict_using_nested_cross_validation_models",
+        side_effect=RuntimeError("model weights missing"),
+    )
 
-
-# ── Input file backup/restore ────────────────────────────────────────────────
-
-def test_existing_input_is_restored_after_run(tmp_path, mocker):
-    ribonn_dir = _fake_ribonn_dir(tmp_path)
-    input_path = ribonn_dir / "data" / "prediction_input1.txt"
-    original_content = "original data\n"
-    input_path.write_text(original_content)
-
-    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
-        args=[], returncode=1, stdout="", stderr="fail",
-    ))
-
-    import chainofcustody.evaluation.ribonn as mod
-    with pytest.raises(RuntimeError):
-        mod._run_ribonn(_PARSED, ribonn_dir)
-
-    assert input_path.read_text() == original_content
+    with pytest.raises(RuntimeError, match="model weights missing"):
+        _score_with_dir(_PARSED, tmp_path)

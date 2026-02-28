@@ -12,22 +12,28 @@ Repo: https://github.com/Sanofi-Public/RiboNN
 
 from __future__ import annotations
 
-import csv
-import shutil
-import subprocess
+import contextlib
 import sys
 import tempfile
 from pathlib import Path
 
+import pandas as pd
+
 from chainofcustody.sequence import mRNASequence
 
 # Path to the RiboNN submodule, relative to this file:
-#   chainofcustody/evaluation/ribonn.py  → parents[2] = repo root
+#   chainofcustody/evaluation/ribonn.py  →  parents[2] = repo root
 _RIBONN_DIR = Path(__file__).parents[2] / "vendor" / "RiboNN"
 
-# RiboNN hard-codes this input path relative to its own root (see vendor/RiboNN/src/main.py)
-_INPUT_FILE = "data/prediction_input1.txt"
-_OUTPUT_FILE = "results/human/prediction_output.txt"
+_SPECIES = "human"
+_TOP_K = 5
+
+
+def _ensure_importable() -> None:
+    """Add vendor/RiboNN to sys.path so src.* modules can be imported."""
+    ribonn_str = str(_RIBONN_DIR)
+    if ribonn_str not in sys.path:
+        sys.path.insert(0, ribonn_str)
 
 
 def _te_status(mean_te: float) -> str:
@@ -41,76 +47,64 @@ def _te_status(mean_te: float) -> str:
 def score_ribonn(parsed: mRNASequence) -> dict:
     """Predict translation efficiency using RiboNN.
 
-    Returns a dict with keys: ``mean_te``, ``per_tissue``, ``status``, ``message``.
+    Returns a dict with keys: ``mean_te``, ``per_tissue``, ``status``,
+    ``message``.
 
     Raises:
-        RuntimeError: if the RiboNN subprocess fails or produces no output.
+        RuntimeError: if RiboNN prediction fails.
     """
-    return _run_ribonn(parsed, _RIBONN_DIR)
+    return _score_with_dir(parsed, _RIBONN_DIR)
 
 
-def _run_ribonn(parsed: mRNASequence, ribonn_dir: Path) -> dict:
-    """Write input, invoke RiboNN subprocess, parse output."""
-    target = ribonn_dir / _INPUT_FILE
-    target.parent.mkdir(parents=True, exist_ok=True)
+def _score_with_dir(parsed: mRNASequence, ribonn_dir: Path) -> dict:
+    """Run RiboNN from *ribonn_dir*. Separated for testability."""
+    _ensure_importable()
+    from src.predict import predict_using_nested_cross_validation_models  # noqa: PLC0415
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        backup = Path(tmpdir) / "backup.txt"
+    run_df = pd.read_csv(ribonn_dir / "models" / _SPECIES / "runs.csv")
 
-        # Back up any pre-existing input file
-        if target.exists():
-            shutil.copy2(target, backup)
+    # RiboNNDataModule still needs a file path — write to system tmp, not into
+    # the submodule, so the submodule working tree stays clean.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=True) as fh:
+        fh.write("tx_id\tutr5_sequence\tcds_sequence\tutr3_sequence\n")
+        fh.write(f"query\t{parsed.utr5}\t{parsed.cds}\t{parsed.utr3}\n")
+        fh.flush()
+        input_path = fh.name
 
-        target.write_text(
-            "tx_id\tutr5_sequence\tcds_sequence\tutr3_sequence\n"
-            f"query\t{parsed.utr5}\t{parsed.cds}\t{parsed.utr3}\n"
-        )
-
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "src.main", "--predict", "human"],
-                cwd=str(ribonn_dir),
-                capture_output=True,
-                text=True,
-                timeout=300,
+        # contextlib.chdir is required: model weight paths in predict.py are
+        # relative strings (e.g. "models/human/{run_id}/state_dict.pth").
+        with contextlib.chdir(ribonn_dir):
+            predictions = predict_using_nested_cross_validation_models(
+                input_path,
+                _SPECIES,
+                run_df,
+                top_k_models_to_use=_TOP_K,
+                batch_size=32,
+                num_workers=0,  # 0 avoids fork/spawn issues on macOS
             )
-        finally:
-            if backup.exists():
-                shutil.copy2(backup, target)
-            elif target.exists():
-                target.unlink()
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"RiboNN exited with code {result.returncode}: {result.stderr[:300]}"
-        )
-
-    return _parse_output(ribonn_dir)
+    return _aggregate(predictions)
 
 
-def _parse_output(ribonn_dir: Path) -> dict:
-    """Read and parse RiboNN's prediction_output.txt."""
-    output_file = ribonn_dir / _OUTPUT_FILE
+def _aggregate(predictions: pd.DataFrame) -> dict:
+    """Average across folds and return the scored result dict."""
+    predicted_cols = [c for c in predictions.columns if c.startswith("predicted_")]
 
-    if not output_file.exists():
-        raise RuntimeError(f"RiboNN output file not found: {output_file}")
+    row = (
+        predictions
+        .groupby(
+            ["tx_id", "utr5_sequence", "cds_sequence", "utr3_sequence"],
+            as_index=False,
+        )[predicted_cols]
+        .mean()
+        .iloc[0]
+    )
 
-    with output_file.open() as fh:
-        rows = list(csv.DictReader(fh, delimiter="\t"))
-
-    if not rows:
-        raise RuntimeError("RiboNN produced empty output")
-
-    row = rows[0]
-    mean_te = float(row["mean_predicted_TE"])
-
-    per_tissue = {}
-    for key, val in row.items():
-        if key.startswith("predicted_") and key != "mean_predicted_TE":
-            try:
-                per_tissue[key.removeprefix("predicted_")] = float(val)
-            except (ValueError, TypeError):
-                continue
+    mean_te = float(row[predicted_cols].mean())
+    per_tissue = {
+        c.removeprefix("predicted_TE_"): round(float(row[c]), 4)
+        for c in predicted_cols
+    }
 
     return {
         "mean_te": round(mean_te, 4),
