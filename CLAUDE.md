@@ -65,6 +65,21 @@ Note: tissue specificity (target vs off-target TE differential) is not used as t
 primary metric because it is dominated by the fixed CDS and provides no gradient when
 only the 5'UTR is evolved. Absolute target TE is optimised instead.
 
+### Target cell type flow
+
+A single `--target` option (seed-map format, e.g. `Fibroblast`) drives the
+entire pipeline:
+
+1. **3'UTR design** — `filtering_on_target.greedy_mirna_cover` finds miRNAs
+   silent in the target but expressed in every other cell type.  Sponging them
+   de-represses translation specifically in the target.
+2. **RiboNN scoring** — the seed-map name is translated to its RiboNN column
+   name via `three_prime.cell_type_map.seed_map_to_ribonn` (e.g.
+   `Fibroblast` → `fibroblast`) before any model call.
+
+The mapping lives in `chainofcustody/three_prime/cell_type_map.py`.  Add new
+entries there when new overlapping cell types are identified.
+
 ### Tests
 
 ```bash

@@ -8,7 +8,8 @@ _CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
 _UTR3 = "GAGTAGUCCC"
 _UTR5_MIN = 4
 _UTR5_MAX = 10
-_OFF_TARGET_CELL_TYPE = "Hepatocyte"
+_TARGET = "Fibroblast"
+_RIBONN_TARGET = "fibroblast"
 
 
 @pytest.fixture
@@ -61,12 +62,12 @@ def mock_scoring(mocker):
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "stability_score": 0.7, "status": "GREEN"},
         "ribonn_scores": {
             "mean_te": 1.8,
-            "target_cell_type": "megakaryocytes",
+            "target_cell_type": _RIBONN_TARGET,
             "target_te": 2.2,
             "mean_off_target_te": 0.9,
             "per_tissue": None,
             "status": "GREEN",
-            "message": "RiboNN: megakaryocytes TE = 2.2000, mean off-target = 0.9000",
+            "message": f"RiboNN: {_RIBONN_TARGET} TE = 2.2000, mean off-target = 0.9000",
         },
         "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "specificity": "GREY"},
     }
@@ -161,44 +162,46 @@ def test_utr5_min_gt_max_rejected(runner, mock_get_cds):
     assert "Error" in result.output
 
 
-def test_off_target_cell_type_is_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "Hepatocyte_derived"])
-
-    mock_generate_utr3.assert_called_once_with("Hepatocyte_derived")
-
-
-def test_off_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--gene", _GENE])
-
-    mock_generate_utr3.assert_called_once_with(_OFF_TARGET_CELL_TYPE)
-
-
-def test_off_target_cell_type_not_found(runner, mock_get_cds, mocker):
-    mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("Unknown cell type 'BADTYPE'"))
-    result = runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "BADTYPE"])
-
-    assert result.exit_code == 1
-    assert "Error" in result.output
-
-
-def test_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+def test_target_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """Default --target uses Fibroblast; 3'UTR generated for seed-map name, RiboNN gets mapped name."""
     result = runner.invoke(main, ["--gene", _GENE])
 
     assert result.exit_code == 0, result.output
+    mock_generate_utr3.assert_called_once_with(_TARGET)
     _, kwargs = mock_optimize_run.call_args
-    assert kwargs["target_cell_type"] == "megakaryocytes"
+    assert kwargs["target_cell_type"] == _RIBONN_TARGET
 
 
-def test_target_cell_type_custom(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
-    result = runner.invoke(main, ["--gene", _GENE, "--target-cell-type", "HeLa"])
+def test_target_custom(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """Explicit --target is forwarded correctly to both 3'UTR generation and optimizer."""
+    result = runner.invoke(main, ["--gene", _GENE, "--target", "Fibroblast"])
 
     assert result.exit_code == 0, result.output
+    mock_generate_utr3.assert_called_once_with("Fibroblast")
     _, kwargs = mock_optimize_run.call_args
-    assert kwargs["target_cell_type"] == "HeLa"
+    assert kwargs["target_cell_type"] == "fibroblast"
 
 
-def test_target_cell_type_invalid(runner, mock_get_cds, mock_generate_utr3):
-    result = runner.invoke(main, ["--gene", _GENE, "--target-cell-type", "NotARealTissue"])
+def test_target_invalid(runner, mock_get_cds, mock_generate_utr3):
+    """An unrecognised --target exits with an error before touching any IO."""
+    result = runner.invoke(main, ["--gene", _GENE, "--target", "NotARealCellType"])
 
     assert result.exit_code == 1
     assert "Error" in result.output
+
+
+def test_target_error_propagates(runner, mock_get_cds, mocker):
+    """A ValueError from generate_utr3 is shown as an error."""
+    mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("No miRNAs found"))
+    result = runner.invoke(main, ["--gene", _GENE, "--target", _TARGET])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_no_off_target_option(runner):
+    """The old --off-target-cell-type flag must no longer exist."""
+    result = runner.invoke(main, ["--help"])
+
+    assert "off-target-cell-type" not in result.output
+    assert "off_target_cell_type" not in result.output

@@ -1,6 +1,7 @@
 import numpy as np
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.core.callback import Callback
+from pymoo.core.population import Population
 from pymoo.operators.crossover.ux import UniformCrossover
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
@@ -29,13 +30,74 @@ class _ProgressCallback(Callback):
         )
 
 
+class ElitistNSGA3(NSGA3):
+    """NSGA-III with an external elitist archive.
+
+    After every generation the Pareto-optimal individuals found so far are
+    stored in ``self.archive``.  On the *next* generation they are injected
+    into the candidate pool before NSGA-III's own ``ReferenceDirectionSurvival``
+    runs, so the best-ever solutions are always eligible for survival.
+
+    This guarantees **monotone improvement**: the Pareto front can only stay
+    the same or grow better — it can never regress to a state that was
+    dominated by a previously discovered solution.
+
+    The archive is capped at ``archive_size`` (default: ``pop_size``) to keep
+    survival selection tractable.  When the archive exceeds this cap it is
+    pruned using NSGA-III's own survival operator so the reference-direction
+    diversity structure is preserved.
+    """
+
+    def __init__(self, *args, archive_size: int | None = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._archive_size: int | None = archive_size
+        self._elitist_archive: Population | None = None
+
+    def _advance(self, infills=None, **kwargs) -> None:
+        # Merge new offspring with current population (standard NSGA-III step)
+        pop = self.pop
+        if infills is not None:
+            pop = Population.merge(pop, infills)
+
+        # Inject archive members so they can never be lost.  Archive is None
+        # on the very first generation.
+        if self._elitist_archive is not None and len(self._elitist_archive) > 0:
+            pop = Population.merge(pop, self._elitist_archive)
+
+        # NSGA-III survival prunes back to pop_size preserving reference-direction
+        # diversity.
+        self.pop = self.survival.do(
+            self.problem, pop,
+            n_survive=self.pop_size,
+            algorithm=self,
+            random_state=self.random_state,
+            **kwargs,
+        )
+
+        # Update the archive from the current Pareto-optimal set.  The survival
+        # operator maintains self.survival.opt; use it to avoid a redundant
+        # non-dominated sort.
+        current_opt = self.survival.opt
+        self._elitist_archive = current_opt if (current_opt is not None and len(current_opt) > 0) else self.pop
+
+        # Prune archive if it exceeds the cap.
+        cap = self._archive_size or self.pop_size
+        if len(self._elitist_archive) > cap:
+            self._elitist_archive = self.survival.do(
+                self.problem, self._elitist_archive,
+                n_survive=cap,
+                algorithm=self,
+                random_state=self.random_state,
+            )
+
+
 def build_algorithm(
     pop_size: int = 128,
     mutation_rate: float = 0.05,
     initial_length: int | None = None,
     max_length_delta: int = 50,
-) -> NSGA3:
-    """Construct an NSGA3 instance for nucleotide sequence optimisation.
+) -> ElitistNSGA3:
+    """Construct an ElitistNSGA3 instance for nucleotide sequence optimisation.
 
     Args:
         pop_size: Number of individuals in the population.
@@ -43,11 +105,11 @@ def build_algorithm(
         initial_length: Seed the population around this 5'UTR length (None = uniform).
         max_length_delta: Maximum nt change to the length variable per mutation event.
     """
-    # n_partitions=3 → 84 Das-Dennis reference points for 6 objectives,
-    # which fits within the default pop_size=128 (NSGA-III requires pop_size ≥ n_ref_points).
+    # n_partitions=3 -> 84 Das-Dennis reference points for 4 objectives,
+    # which fits within the default pop_size=128 (NSGA-III requires pop_size >= n_ref_points).
     ref_dirs = get_reference_directions("das-dennis", N_OBJECTIVES, n_partitions=3)
 
-    return NSGA3(
+    return ElitistNSGA3(
         ref_dirs=ref_dirs,
         pop_size=pop_size,
         sampling=NucleotideSampling(initial_length=initial_length),
