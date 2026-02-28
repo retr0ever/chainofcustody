@@ -8,7 +8,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 
 from chainofcustody.evaluation.fitness import compute_fitness
 from chainofcustody.evaluation.report import print_batch_report, print_report, score_sequence
-from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
+from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
 from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
 from chainofcustody.three_prime import generate_utr3
 

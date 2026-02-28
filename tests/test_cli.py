@@ -138,7 +138,7 @@ def test_csv_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run,
 
 
 def test_gene_not_found(runner, mocker, mock_generate_utr3):
-    from chainofcustody.initial import GeneNotFoundError
+    from chainofcustody.cds import GeneNotFoundError
     mocker.patch("chainofcustody.cli.get_canonical_cds", side_effect=GeneNotFoundError("BADGENE not found"))
     result = runner.invoke(main, ["--gene", "BADGENE"])
 

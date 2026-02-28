@@ -1,6 +1,6 @@
 import pytest
 
-from chainofcustody.initial import get_canonical_cds
+from chainofcustody.cds import get_canonical_cds
 
 
 @pytest.mark.integration

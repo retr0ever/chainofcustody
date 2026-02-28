@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
+from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
 
 
 @pytest.fixture(autouse=True)
 def mock_mygene(mocker):
-    mg_mock = mocker.patch("chainofcustody.initial.cds._mg")
+    mg_mock = mocker.patch("chainofcustody.cds.lookup._mg")
     mg_mock.query.return_value = {
         "hits": [{"ensembl": {"gene": "ENSG00000012048"}}]
     }
@@ -15,7 +15,7 @@ def mock_mygene(mocker):
 
 @pytest.fixture
 def mock_requests(mocker):
-    return mocker.patch("chainofcustody.initial.cds.requests.get")
+    return mocker.patch("chainofcustody.cds.lookup.requests.get")
 
 
 def _make_response(json_data: dict, status_code: int = 200) -> MagicMock:
