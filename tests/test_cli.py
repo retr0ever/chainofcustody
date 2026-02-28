@@ -8,7 +8,8 @@ _CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
 _UTR3 = "GAGTAGUCCC"
 _UTR5_MIN = 4
 _UTR5_MAX = 10
-_OFF_TARGET_CELL_TYPE = "Dendritic_cell"
+_TARGET = "Fibroblast"
+_RIBONN_TARGET = "fibroblast"
 
 
 @pytest.fixture
@@ -53,17 +54,25 @@ def mock_optimize_run(mocker):
 
 @pytest.fixture
 def mock_scoring(mocker):
-    """Mock the evaluation pipeline so optimize tests don't need ViennaRNA etc."""
+    """Mock the evaluation pipeline so optimize tests don't need DRfold2/RiboNN."""
     mock_report = {
-        "sequence_info": {"total_length": 4, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
-        "structure_scores": {"utr5_accessibility": {"mfe": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
-        "manufacturing_scores": {"total_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
-        "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "au_rich_elements": 0, "stability_score": 0.7, "status": "GREEN"},
-        "ribonn_scores": {"available": False, "mean_te": None, "per_tissue": None, "status": "GREY", "message": "RiboNN not available"},
-        "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "translation_efficiency": "GREY"},
+        "sequence_info": {"total_length": 4, "full_length": 127, "cap5_length": 3, "utr5_length": 0, "cds_length": 3, "utr3_length": 0, "num_codons": 1},
+        "structure_scores": {"utr5_accessibility": {"mfe": None, "mfe_per_nt": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
+        "manufacturing_scores": {"total_violations": 0, "utr5_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}, "uorfs": {"pass": True, "count": 0, "positions": [], "violations": []}},
+        "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "stability_score": 0.7, "status": "GREEN"},
+        "ribonn_scores": {
+            "mean_te": 1.8,
+            "target_cell_type": _RIBONN_TARGET,
+            "target_te": 2.2,
+            "mean_off_target_te": 0.9,
+            "per_tissue": None,
+            "status": "GREEN",
+            "message": f"RiboNN: {_RIBONN_TARGET} TE = 2.2000, mean off-target = 0.9000",
+        },
+        "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "specificity": "GREY"},
     }
     mock_fitness = {
-        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["utr5_accessibility", "manufacturability", "stability", "translation_efficiency"]},
+        "scores": {m: {"value": 0.8, "weight": 0.1, "weighted": 0.08, "status": "GREEN"} for m in ["utr5_accessibility", "manufacturability", "stability", "specificity"]},
         "overall": 0.8,
         "suggestions": [],
     }
@@ -88,9 +97,11 @@ def test_summary_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_
     assert result.exit_code == 0, result.output
     assert "Candidate Ranking" in result.output or "Pareto front" in result.output
     _, kwargs = mock_optimize_run.call_args
-    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers")} == {
+    assert {k: kwargs[k] for k in ("utr5_min", "utr5_max", "pop_size", "n_gen", "mutation_rate", "seed", "n_workers", "initial_length", "max_length_delta", "seed_from_data", "gradient_seed_steps")} == {
         "utr5_min": _UTR5_MIN, "utr5_max": _UTR5_MAX,
-        "pop_size": 10, "n_gen": 2, "mutation_rate": 0.01, "seed": None, "n_workers": None,
+        "pop_size": 10, "n_gen": 2, "mutation_rate": 0.05, "seed": None, "n_workers": None,
+        "initial_length": 200, "max_length_delta": 50,
+        "seed_from_data": True, "gradient_seed_steps": 0,
     }
 
 
@@ -152,21 +163,78 @@ def test_utr5_min_gt_max_rejected(runner, mock_get_cds):
     assert "Error" in result.output
 
 
-def test_off_target_cell_type_is_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "Hepatocyte_derived"])
+def test_target_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """Default --target uses Fibroblast; 3'UTR generated for seed-map name, RiboNN gets mapped name."""
+    result = runner.invoke(main, ["--gene", _GENE])
 
-    mock_generate_utr3.assert_called_once_with("Hepatocyte_derived")
-
-
-def test_off_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
-    runner.invoke(main, ["--gene", _GENE])
-
-    mock_generate_utr3.assert_called_once_with(_OFF_TARGET_CELL_TYPE)
+    assert result.exit_code == 0, result.output
+    mock_generate_utr3.assert_called_once_with(_TARGET)
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["target_cell_type"] == _RIBONN_TARGET
 
 
-def test_off_target_cell_type_not_found(runner, mock_get_cds, mocker):
-    mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("Unknown cell type 'BADTYPE'"))
-    result = runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "BADTYPE"])
+def test_target_custom(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """Explicit --target is forwarded correctly to both 3'UTR generation and optimizer."""
+    result = runner.invoke(main, ["--gene", _GENE, "--target", "Fibroblast"])
+
+    assert result.exit_code == 0, result.output
+    mock_generate_utr3.assert_called_once_with("Fibroblast")
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["target_cell_type"] == "fibroblast"
+
+
+def test_target_invalid(runner, mock_get_cds, mock_generate_utr3):
+    """An unrecognised --target exits with an error before touching any IO."""
+    result = runner.invoke(main, ["--gene", _GENE, "--target", "NotARealCellType"])
 
     assert result.exit_code == 1
     assert "Error" in result.output
+
+
+def test_target_error_propagates(runner, mock_get_cds, mocker):
+    """A ValueError from generate_utr3 is shown as an error."""
+    mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("No miRNAs found"))
+    result = runner.invoke(main, ["--gene", _GENE, "--target", _TARGET])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_no_off_target_option(runner):
+    """The old --off-target-cell-type flag must no longer exist."""
+    result = runner.invoke(main, ["--help"])
+
+    assert "off-target-cell-type" not in result.output
+    assert "off_target_cell_type" not in result.output
+
+
+def test_seed_from_data_default_is_true(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--seed-from-data is enabled by default."""
+    runner.invoke(main, ["--gene", _GENE])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["seed_from_data"] is True
+
+
+def test_no_seed_from_data_flag(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--no-seed-from-data disables MOESM3 warm-start seeding."""
+    runner.invoke(main, ["--gene", _GENE, "--no-seed-from-data"])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["seed_from_data"] is False
+
+
+def test_gradient_seed_steps_default_is_zero(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--gradient-seed-steps defaults to 0 (disabled)."""
+    runner.invoke(main, ["--gene", _GENE])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["gradient_seed_steps"] == 0
+
+
+def test_gradient_seed_steps_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    """--gradient-seed-steps value is forwarded to run()."""
+    runner.invoke(main, ["--gene", _GENE, "--gradient-seed-steps", "100"])
+
+    _, kwargs = mock_optimize_run.call_args
+    assert kwargs["gradient_seed_steps"] == 100

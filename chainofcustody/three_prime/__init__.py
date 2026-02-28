@@ -1,35 +1,48 @@
 """Public API for the three_prime package.
 
-The single exported function ``generate_utr3`` takes an off-target cell type
-name and returns an optimised 3'UTR sequence that contains sponge sites for the
-miRNAs most highly and specifically expressed in that off-target cell type.
+:func:`generate_utr3` generates a 3'UTR sponge that captures miRNAs highly
+expressed in a *target* cell type — suppressing expression everywhere that
+cell type is not active (on-target protection strategy).
+
+The greedy set-cover algorithm in :mod:`filtering_on_target` selects miRNAs
+that are **silent** in the target but **expressed** in every other cell type,
+so sponging those miRNAs de-represses translation specifically in the target
+while leaving off-target expression unaffected.
 """
 
-from chainofcustody.three_prime.filtering import load_data, mirnas_for_off_target_cell_type
+from chainofcustody.three_prime.filtering_on_target import (
+    greedy_mirna_cover,
+    load_data,
+)
 from chainofcustody.three_prime.generate_utr3 import generate_mrna_sponge_utr
 
 
 def generate_utr3(
-    off_target_cell_type: str,
-    threshold: float = 0.0,
-    top_n: int = 5,
+    target_cell_type: str,
+    target_threshold: float = 10.0,
+    cover_threshold: float = 1000.0,
+    max_mirnas: int = 5,
     num_sites: int = 16,
 ) -> str:
-    """Generate a 3'UTR sponge sequence tailored for a given off-target cell type.
+    """Generate a 3'UTR sponge sequence tailored for a given *target* cell type.
 
-    Identifies the ``top_n`` lowest-entropy miRNAs whose mean expression in
-    ``off_target_cell_type`` exceeds ``threshold``, then builds a multi-site
-    sponge 3'UTR that sequesters those miRNAs to prevent off-target silencing.
+    Uses a greedy weighted-set-cover algorithm to find miRNAs that are
+    **silent** in ``target_cell_type`` (mean RPM < ``target_threshold``) but
+    **expressed** in every other cell type (mean RPM ≥ ``cover_threshold``).
+    Sponging these miRNAs de-represses translation in the target tissue while
+    keeping off-target silencing intact.
 
     Parameters
     ----------
-    off_target_cell_type : str
-        Off-target cell type name as it appears in the expression database
-        (e.g. ``"Hepatocyte_derived"``).
-    threshold : float
-        Minimum mean expression level for a miRNA to be included.
-    top_n : int
-        Number of miRNAs to include sponge sites for (default 5).
+    target_cell_type : str
+        Target cell type name as it appears in ``cell_type_seed_map.csv``
+        (e.g. ``"Fibroblast"``).
+    target_threshold : float
+        Maximum mean RPM in the target for a miRNA to be a candidate.
+    cover_threshold : float
+        Minimum mean RPM in a non-target cell for it to count as "covered".
+    max_mirnas : int
+        Maximum number of miRNAs to include sponge sites for (default 5).
     num_sites : int
         Total number of sponge site repeats in the 3'UTR cassette (default 16).
 
@@ -42,31 +55,41 @@ def generate_utr3(
     Raises
     ------
     ValueError
-        If ``off_target_cell_type`` is not present in the expression database.
-    RuntimeError
-        If no miRNAs pass the expression ``threshold`` for the given
-        off-target cell type.
+        If ``target_cell_type`` is not present in the expression database, or
+        if no candidate miRNAs are found.
     """
-    mature_seqs, df_mirna_expr, df_grouped = load_data()
+    (
+        mature_seqs,
+        _seed_seqs,
+        _df_seed_map,
+        _df_sample_celltype_mir,
+        df_mir_celltype_mean,
+        _mir_to_seed,
+    ) = load_data()
 
-    mirnas = mirnas_for_off_target_cell_type(
-        off_target_cell_type=off_target_cell_type,
-        mature_seqs=mature_seqs,
-        df_mirna_expr=df_mirna_expr,
-        df_grouped=df_grouped,
-        threshold=threshold,
-        top_n=top_n,
+    result = greedy_mirna_cover(
+        target_cell=target_cell_type,
+        df_mir_celltype_mean=df_mir_celltype_mean,
+        target_threshold=target_threshold,
+        cover_threshold=cover_threshold,
+        max_mirnas=max_mirnas,
     )
 
-    if mirnas.empty:
-        raise RuntimeError(
-            f"No miRNAs found for off-target cell type '{off_target_cell_type}' "
-            f"with mean expression >= {threshold}."
+    selected = result["selected_mirnas"]
+    if not selected:
+        raise ValueError(
+            f"No candidate miRNAs found for target '{target_cell_type}'. "
+            "Try lowering --target-threshold or --cover-threshold."
         )
 
-    sequences = mirnas["mature_sequence"].tolist()
-    result = generate_mrna_sponge_utr(sequences, num_sites=num_sites)
-    return result["full_utr"]
+    sequences = [mature_seqs[m] for m in selected if m in mature_seqs]
+    if not sequences:
+        raise ValueError(
+            f"Selected miRNAs for '{target_cell_type}' have no known mature sequences."
+        )
+
+    sponge = generate_mrna_sponge_utr(sequences, num_sites=num_sites)
+    return sponge["full_utr"]
 
 
 __all__ = ["generate_utr3"]

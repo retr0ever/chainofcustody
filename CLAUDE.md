@@ -11,7 +11,7 @@ chainofcustody/
   cds/                # Gene fetching from Ensembl (get_canonical_cds)
   evaluation/          # 4-metric scoring pipeline
     structure.py       # Metric 1: ViennaRNA folding (5'UTR accessibility, global MFE)
-    manufacturing.py   # Metric 2: GC windows, homopolymers, restriction sites
+    manufacturing.py   # Metric 2: GC windows, homopolymers, restriction sites, uORFs
     stability.py       # Metric 3: GC3, MFE/nt, AU-rich elements
     ribonn.py          # Metric 4: RiboNN translation efficiency (optional, subprocess)
     scoring.py         # Pipeline orchestrator: runs all metrics, builds report + summary
@@ -27,6 +27,8 @@ data/
   MOESM3_ESM.xlsx      # Translation efficiency dataset (human, multiple cell types)
 scripts/               # One-time data preparation utilities (not part of the package)
   merge_db.py          # Builds three_prime/db/ CSVs from Bioconductor microRNAome (requires R + rpy2)
+vendor/
+  RiboNN/              # git submodule — Sanofi RiboNN deep-CNN (translation efficiency)
 tests/                 # pytest suite (skip integration tests by default)
 ```
 
@@ -54,10 +56,41 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 
 | Metric | Weight | GREEN threshold | What it measures |
 |---|---|---|---|
-| utr5_accessibility | 22% | MFE < -30 kcal/mol | 5'UTR structure stability |
-| manufacturability | 30% | 0 violations | DNA synthesis feasibility |
-| stability | 35% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt, AREs) |
-| translation_efficiency | 13% | mean TE >= 1.5 | RiboNN predicted translation efficiency (optional) |
+| utr5_accessibility | 35% | MFE/nt >= -0.1 | 5'UTR accessibility (sigmoid midpoint=-0.2, k=15) |
+| manufacturability | 30% | 0 UTR violations | GC windows, homopolymers, restriction sites, uORFs (sigmoid midpoint=1, k=-2) |
+| stability | 20% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt; sigmoid midpoint=0.6, k=8) |
+| specificity | 15% | target TE >= 1.5 | Absolute RiboNN target-tissue TE (sigmoid midpoint=1.2, k=3) |
+
+**Why these weights:** RiboNN TE varies by <1% across candidates in a single run (the fixed CDS
+dominates the prediction, the 5'UTR contributes ~0.01 TE units of variance). TE is therefore most
+useful for final **ranking** rather than as an optimisation gradient. The real actionable levers are:
+
+1. **utr5_accessibility (35%)** — 5'UTR secondary structure directly controls ribosome scanning rate.
+   An accessible cap-proximal region is the strongest single lever available to the 5'UTR optimizer.
+2. **manufacturability (30%)** — includes uORF penalty: upstream AUGs in the 5'UTR create competing
+   ORFs that dramatically reduce main-ORF translation. Eliminating uORFs is biologically actionable
+   and produces a real gradient signal.
+3. **stability (20%)** — mRNA half-life amplifies total protein output independently of translation rate.
+4. **specificity (15%)** — RiboNN TE in the target tissue; low weight because gradient is minimal,
+   but still used for final candidate ranking.
+
+Note: tissue specificity (target vs off-target TE differential) is not used because it is dominated
+by the fixed CDS and provides no gradient when only the 5'UTR is evolved.
+
+### Target cell type flow
+
+A single `--target` option (seed-map format, e.g. `Fibroblast`) drives the
+entire pipeline:
+
+1. **3'UTR design** — `filtering_on_target.greedy_mirna_cover` finds miRNAs
+   silent in the target but expressed in every other cell type.  Sponging them
+   de-represses translation specifically in the target.
+2. **RiboNN scoring** — the seed-map name is translated to its RiboNN column
+   name via `three_prime.cell_type_map.seed_map_to_ribonn` (e.g.
+   `Fibroblast` → `fibroblast`) before any model call.
+
+The mapping lives in `chainofcustody/three_prime/cell_type_map.py`.  Add new
+entries there when new overlapping cell types are identified.
 
 ### Tests
 
@@ -72,7 +105,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Mocking rules:**
 - Mock `score_parsed` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
 - Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
-- The mock report dict must include all top-level keys: `sequence_info`, `structure_scores`, `manufacturing_scores`, `stability_scores`, `ribonn_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
+- The mock report dict must include all top-level keys: `sequence_info`, `structure_scores`, `manufacturing_scores`, `stability_scores`, `ribonn_scores`, and `summary`. `ribonn_scores` must contain `mean_te` (float), `status`, and `message`.
 
 
 **Test structure:**
@@ -109,5 +142,5 @@ fitness = compute_fitness(report)
 
 ## Dependencies requiring system install
 
-- **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Install via conda or system package manager if pip install fails.
-- **RiboNN** (optional): Translation efficiency prediction. Clone from `github.com/Sanofi-Public/RiboNN`, then set `RIBONN_DIR=/path/to/RiboNN`. Requires PyTorch. The metric degrades gracefully to GREY/0.5 when unavailable.
+- **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Installed automatically via `uv sync`.
+- **RiboNN**: Translation efficiency prediction. Bundled as a git submodule at `vendor/RiboNN`. Initialise with `git submodule update --init vendor/RiboNN`. Requires PyTorch (already in the venv).

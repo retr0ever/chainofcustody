@@ -9,12 +9,15 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from chainofcustody.evaluation.fitness import compute_fitness
 from chainofcustody.evaluation.report import print_batch_report, print_report
 from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
-from chainofcustody.optimization import KOZAK, METRIC_NAMES, mRNASequence, SequenceProblem, assemble_mrna, run, score_parsed
+from chainofcustody.optimization import KOZAK, METRIC_NAMES, mRNASequence, SequenceProblem, run, score_parsed
 from chainofcustody.three_prime import generate_utr3
+from chainofcustody.three_prime.cell_type_map import SEED_MAP_TO_RIBONN, seed_map_to_ribonn
+from chainofcustody.progress import set_status_callback, set_best_score_callback
 
 console = Console()
 
 _CSV_COLUMNS = ["generation", "sequence", *METRIC_NAMES, "overall"]
+_DEFAULT_TARGET = "Fibroblast"
 
 
 def _write_csv(path: Path, history: list[dict]) -> None:
@@ -24,39 +27,87 @@ def _write_csv(path: Path, history: list[dict]) -> None:
         writer.writerows(history)
 
 
+def _write_ribonn_csv(path: Path, results: list[dict]) -> None:
+    """Write per-tissue RiboNN predictions for each Pareto-front candidate."""
+    rows = []
+    tissue_cols: list[str] = []
+    for r in results:
+        per_tissue: dict | None = r["report"]["ribonn_scores"].get("per_tissue")
+        if per_tissue and not tissue_cols:
+            tissue_cols = list(per_tissue.keys())
+        row: dict = {
+            "label": r["label"],
+            "mean_te": r["report"]["ribonn_scores"]["mean_te"],
+            "status": r["report"]["ribonn_scores"]["status"],
+        }
+        if per_tissue:
+            row.update(per_tissue)
+        rows.append(row)
+
+    fieldnames = ["label", "mean_te", "status", *tissue_cols]
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def _to_rna(seq: str) -> str:
-    """Convert a DNA sequence to RNA (T → U, uppercase)."""
+    """Convert a DNA sequence to RNA (T -> U, uppercase)."""
     return seq.upper().replace("T", "U")
 
 
 @click.command()
 @click.option("--gene", default="POU5F1", show_default=True, help="HGNC gene symbol whose canonical CDS to optimise (e.g. TP53).")
-@click.option("--off-target-cell-type", default="Dendritic_cell", show_default=True, help="Off-target cell type used to generate the 3'UTR sponge (must match a name in the expression database).")
-@click.option("--utr5-min", type=int, default=10, show_default=True, help="Minimum 5'UTR length the GA can produce.")
-@click.option("--utr5-max", type=int, default=100, show_default=True, help="Maximum 5'UTR length the GA can produce.")
-@click.option("--pop-size", type=int, default=128, show_default=True, help="Population size (must be ≥ number of reference directions; default covers Das-Dennis n_partitions=4 → 126 directions).")
+@click.option(
+    "--target",
+    default=_DEFAULT_TARGET,
+    show_default=True,
+    help=(
+        "Target cell type for both 3'UTR sponge design and translation efficiency scoring. "
+        "Must appear in cell_type_seed_map.csv with a RiboNN mapping. "
+        f"Available: {', '.join(sorted(SEED_MAP_TO_RIBONN))}."
+    ),
+)
+@click.option("--utr5-min", type=int, default=20, show_default=True, help="Minimum 5'UTR length the GA can produce.")
+@click.option("--utr5-max", type=int, default=1000, show_default=True, help="Maximum 5'UTR length the GA can produce.")
+@click.option("--utr5-init", type=int, default=200, show_default=True, help="Initial 5'UTR length seed for the population (Gaussian spread +-10%).")
+@click.option("--pop-size", type=int, default=128, show_default=True, help="Population size (must be >= number of reference directions; default covers Das-Dennis n_partitions=4 -> 126 directions).")
 @click.option("--n-gen", type=int, default=50, show_default=True, help="Number of generations.")
-@click.option("--mutation-rate", type=float, default=0.01, show_default=True, help="Per-position mutation probability.")
+@click.option("--mutation-rate", type=float, default=0.05, show_default=True, help="Per-position mutation probability.")
+@click.option("--max-length-delta", type=int, default=50, show_default=True, help="Maximum change in 5'UTR length per mutation event.")
 @click.option("--seed", type=int, default=None, help="Random seed for reproducibility.")
 @click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
+@click.option("--seed-from-data/--no-seed-from-data", default=True, show_default=True, help="Warm-start a portion of the initial population with top-TE 5'UTR sequences from the MOESM3 dataset.")
+@click.option("--gradient-seed-steps", type=int, default=0, show_default=True, help="Run this many gradient-ascent steps through RiboNN to design warm-start 5'UTR seeds before NSGA-III (0 = disabled).")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
 @click.option("--csv", "csv_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write Pareto-front results to a CSV file.")
-def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
+@click.option("--ribonn-output", "ribonn_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write per-tissue RiboNN predictions for Pareto-front candidates to a CSV file.")
+def main(gene: str, target: str, utr5_min: int, utr5_max: int, utr5_init: int, pop_size: int, n_gen: int, mutation_rate: float, max_length_delta: int, seed: int | None, workers: int | None, seed_from_data: bool, gradient_seed_steps: int, output_fmt: str, csv_path: Path | None, ribonn_path: Path | None) -> None:
     """Run NSGA3 to evolve an optimal 5'UTR for a given gene."""
     if utr5_min > utr5_max:
-        console.print(f"[bold red]Error:[/bold red] --utr5-min ({utr5_min}) must be ≤ --utr5-max ({utr5_max}).")
+        console.print(f"[bold red]Error:[/bold red] --utr5-min ({utr5_min}) must be <= --utr5-max ({utr5_max}).")
         raise SystemExit(1)
 
-    console.print(f"\nResolving canonical CDS for gene [bold]{gene}[/bold]…")
+    if target not in SEED_MAP_TO_RIBONN:
+        available = ", ".join(sorted(SEED_MAP_TO_RIBONN))
+        console.print(
+            f"[bold red]Error:[/bold red] Unknown --target {target!r}.\n"
+            f"Valid options: {available}"
+        )
+        raise SystemExit(1)
+
+    ribonn_cell_type = seed_map_to_ribonn(target)
+
+    console.print(f"\nResolving canonical CDS for gene [bold]{gene}[/bold]...")
     try:
         cds = _to_rna(get_canonical_cds(gene))
     except GeneNotFoundError as exc:
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise SystemExit(1)
 
-    console.print(f"Generating 3'UTR sponge for off-target cell type [bold]{off_target_cell_type}[/bold]…")
+    console.print(f"Generating 3'UTR sponge for target cell type [bold]{target}[/bold]...")
     try:
-        utr3 = generate_utr3(off_target_cell_type)
+        utr3 = generate_utr3(target)
     except (ValueError, RuntimeError) as exc:
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise SystemExit(1)
@@ -64,33 +115,60 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
     console.print(
         f"CDS resolved: [bold]{len(cds)} nt[/bold]  "
         f"3'UTR: [bold]{len(utr3)} nt[/bold]  "
-        f"5'UTR length: [bold]{utr5_min}–{utr5_max} nt[/bold] (evolved)\n"
+        f"5'UTR length: [bold]{utr5_min}-{utr5_max} nt[/bold] (evolved)\n"
+        f"Target cell type: [bold]{target}[/bold] (RiboNN: [bold]{ribonn_cell_type}[/bold])\n"
     )
     console.print(
-        f"Running NSGA3 — "
+        f"Running NSGA3 - "
         f"pop_size=[bold]{pop_size}[/bold]  "
         f"n_gen=[bold]{n_gen}[/bold]  "
         f"mutation_rate=[bold]{mutation_rate}[/bold]  "
-        f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]\n"
+        f"max_length_delta=[bold]{max_length_delta}[/bold]  "
+        f"workers=[bold]{workers if workers is not None else 'auto'}[/bold]  "
+        f"seed_from_data=[bold]{seed_from_data}[/bold]  "
+        f"gradient_seed_steps=[bold]{gradient_seed_steps}[/bold]\n"
     )
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]Evolving[/bold blue] {task.description}"),
+        TextColumn("[bold blue]{task.description}[/bold blue]"),
         BarColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(),
+        TextColumn("[bold green]best {task.fields[best_score]}[/bold green]"),
+        TextColumn("[dim]{task.fields[status]}[/dim]"),
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task("5'UTR", total=n_gen)
-        X, F, history = run(
-            utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3,
-            pop_size=pop_size, n_gen=n_gen,
-            mutation_rate=mutation_rate, seed=seed, n_workers=workers,
-            progress=progress, progress_task=task,
+        gen_task = progress.add_task(
+            f"Evolving 5'UTR  (gen 0/{n_gen})", total=n_gen,
+            status="starting...", best_score="--",
         )
+
+        def _on_status(msg: str) -> None:
+            progress.update(gen_task, status=msg)
+
+        def _on_best_score(score: float) -> None:
+            progress.update(gen_task, best_score=f"{score:.3f}")
+
+        set_status_callback(_on_status)
+        set_best_score_callback(_on_best_score)
+        try:
+            X, F, history = run(
+                utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3,
+                pop_size=pop_size, n_gen=n_gen,
+                mutation_rate=mutation_rate, seed=seed, n_workers=workers,
+                progress=progress, progress_task=gen_task,
+                target_cell_type=ribonn_cell_type,
+                initial_length=utr5_init,
+                max_length_delta=max_length_delta,
+                seed_from_data=seed_from_data,
+                gradient_seed_steps=gradient_seed_steps,
+            )
+        finally:
+            set_status_callback(None)
+            set_best_score_callback(None)
 
     problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
     sequences = problem.decode(X)
@@ -101,7 +179,7 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
         utr5 = seq[: utr5_len + len(KOZAK)]
         parsed = mRNASequence(utr5=utr5, cds=cds, utr3=utr3)
         try:
-            report = score_parsed(parsed)
+            report = score_parsed(parsed, target_cell_type=ribonn_cell_type)
             fitness = compute_fitness(report)
             results.append({"label": f"pareto_{i + 1}", "sequence": seq, "report": report, "fitness": fitness})
         except Exception:
@@ -116,6 +194,10 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
     if csv_path:
         _write_csv(csv_path, history)
         console.print(f"History written to [bold]{csv_path}[/bold] ({len(history)} rows)\n")
+
+    if ribonn_path:
+        _write_ribonn_csv(ribonn_path, results)
+        console.print(f"RiboNN predictions written to [bold]{ribonn_path}[/bold] ({len(results)} candidates)\n")
 
     if output_fmt == "json":
         out = []

@@ -2,6 +2,8 @@
 
 import re
 
+import numpy as np
+
 from chainofcustody.sequence import mRNASequence
 from .utils import reverse_complement
 
@@ -29,29 +31,35 @@ def check_gc_windows(seq: str, window: int = 50, min_gc: float = 0.30, max_gc: f
             "windows_checked": 1,
         }
 
+    # Vectorised sliding-window GC count via cumulative sum — O(n), no Python loop.
+    is_gc = np.frombuffer(seq.encode(), dtype=np.uint8)
+    is_gc = ((is_gc == ord("G")) | (is_gc == ord("C"))).astype(np.int32)
+    cumsum = np.empty(len(is_gc) + 1, dtype=np.int32)
+    cumsum[0] = 0
+    np.cumsum(is_gc, out=cumsum[1:])
+    window_gc_counts = cumsum[window:] - cumsum[:-window]
+    gc_fractions = window_gc_counts / window
+
+    n_windows = len(gc_fractions)
+    violation_mask = (gc_fractions < min_gc) | (gc_fractions > max_gc)
+    violation_indices = np.where(violation_mask)[0]
+
     violations = []
-    for i in range(len(seq) - window + 1):
-        w = seq[i:i + window]
-        gc = sum(1 for nt in w if nt in "GC") / window
-        if gc < min_gc or gc > max_gc:
+    last_pos = -window
+    for i in violation_indices.tolist():
+        if i - last_pos >= window:
+            gc_val = float(gc_fractions[i])
             violations.append({
                 "position": i,
-                "gc_content": round(gc * 100, 1),
-                "issue": "too_low" if gc < min_gc else "too_high",
+                "gc_content": round(gc_val * 100, 1),
+                "issue": "too_low" if gc_val < min_gc else "too_high",
             })
-
-    # Deduplicate: only report the worst violation per 50bp region
-    deduped = []
-    last_pos = -window
-    for v in violations:
-        if v["position"] - last_pos >= window:
-            deduped.append(v)
-            last_pos = v["position"]
+            last_pos = i
 
     return {
-        "pass": len(deduped) == 0,
-        "violations": deduped,
-        "windows_checked": len(seq) - window + 1,
+        "pass": len(violations) == 0,
+        "violations": violations,
+        "windows_checked": n_windows,
     }
 
 
@@ -107,20 +115,82 @@ def check_restriction_sites(seq: str, sites: dict[str, str] | None = None) -> di
     }
 
 
+def check_uorfs(utr5_seq: str) -> dict:
+    """Detect upstream open reading frames (uORFs) in the 5'UTR.
+
+    Any AUG triplet in the 5'UTR initiates a competing ribosome scanning
+    event.  Even out-of-frame uORFs redirect ribosomes and substantially
+    reduce translation of the main ORF.  Minimising the number of upstream
+    AUGs is one of the most actionable levers for improving 5'UTR translation
+    efficiency.
+
+    Parameters
+    ----------
+    utr5_seq : str
+        5'UTR sequence in RNA alphabet (A/U/G/C), **not** including the Kozak
+        or the main AUG start codon.
+
+    Returns
+    -------
+    dict with keys
+        ``count``      — number of AUG triplets found
+        ``positions``  — list of 0-based positions
+        ``pass``       — True if no upstream AUGs are present
+        ``violations`` — list of dicts (position, sequence) for the report
+    """
+    seq = utr5_seq.upper().replace("T", "U")
+    violations = []
+    for m in re.finditer("AUG", seq):
+        violations.append({"position": m.start(), "sequence": "AUG"})
+    return {
+        "pass": len(violations) == 0,
+        "count": len(violations),
+        "positions": [v["position"] for v in violations],
+        "violations": violations,
+    }
+
+
 def score_manufacturing(parsed: mRNASequence) -> dict:
-    """Run all manufacturability checks."""
+    """Run all manufacturability checks.
+
+    Violations are computed on the full assembled mRNA for reporting purposes.
+    ``utr5_violations`` counts only violations within the 5'UTR — the region
+    the optimiser actually controls — and is used by the fitness normaliser.
+    uORFs (upstream AUGs) are a 5'UTR-only check and are included in
+    ``utr5_violations`` but not the full-sequence counts.
+    """
     seq = str(parsed)
 
     gc = check_gc_windows(seq)
     homopolymers = check_homopolymers(seq)
     restriction = check_restriction_sites(seq)
+    total_violations = (
+        len(gc["violations"]) + len(homopolymers["violations"]) + len(restriction["violations"])
+    )
 
-    total_violations = len(gc["violations"]) + len(homopolymers["violations"]) + len(restriction["violations"])
+    # 5'UTR-only violations (the evolved region the optimizer controls)
+    utr5_seq = parsed.utr5
+    if utr5_seq:
+        gc_u = check_gc_windows(utr5_seq)
+        hp_u = check_homopolymers(utr5_seq)
+        rs_u = check_restriction_sites(utr5_seq)
+        uorf_u = check_uorfs(utr5_seq)
+        utr5_violations = (
+            len(gc_u["violations"])
+            + len(hp_u["violations"])
+            + len(rs_u["violations"])
+            + uorf_u["count"]
+        )
+    else:
+        uorf_u = check_uorfs("")
+        utr5_violations = 0
 
     return {
         "gc_windows": gc,
         "homopolymers": homopolymers,
         "restriction_sites": restriction,
+        "uorfs": uorf_u,
         "total_violations": total_violations,
+        "utr5_violations": utr5_violations,
         "overall_pass": total_violations == 0,
     }

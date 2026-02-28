@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 results.csv
+vendor/RiboNN/models/

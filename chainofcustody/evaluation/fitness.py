@@ -1,53 +1,80 @@
 """Normalised fitness scoring and suggestion engine for candidate ranking."""
 
+import math
+
 DEFAULT_WEIGHTS = {
-    "utr5_accessibility": 0.22,
+    "utr5_accessibility": 0.15,
     "manufacturability": 0.30,
-    "stability": 0.35,
-    "translation_efficiency": 0.13,
+    "stability": 0.20,
+    "specificity": 0.35,
 }
 
 
+def _sigmoid(x: float, midpoint: float, k: float) -> float:
+    """Logistic sigmoid: 1 / (1 + exp(-k * (x - midpoint))).
+
+    Returns values in (0, 1) and never fully saturates, providing gradient
+    even for extreme inputs far outside the expected range.
+    k > 0  → higher x gives higher score
+    k < 0  → higher x gives lower score (e.g. for violation counts)
+    """
+    return 1.0 / (1.0 + math.exp(-k * (x - midpoint)))
+
+
 def _normalise_utr5(report: dict) -> float:
-    """1.0 if MFE < -30, linear to 0 at 0."""
-    mfe = report["structure_scores"].get("utr5_accessibility", {}).get("mfe")
-    if mfe is None:
+    """Sigmoid on MFE/nt of the 5'UTR (higher / less negative → more accessible → 1.0).
+
+    Midpoint at -0.2 kcal/mol/nt; transitions from ~0.9 at -0.05 to ~0.1 at -0.35.
+    """
+    mfe_per_nt = report["structure_scores"].get("utr5_accessibility", {}).get("mfe_per_nt")
+    if mfe_per_nt is None:
         return 0.5  # no data — neutral
-    if mfe < -30:
-        return 1.0
-    elif mfe > 0:
-        return 0.0
-    return -mfe / 30
+    return _sigmoid(mfe_per_nt, midpoint=-0.2, k=15)
 
 
 def _normalise_manufacturing(report: dict) -> float:
-    """max(0, 1 - violations / 10)."""
-    violations = report["manufacturing_scores"]["total_violations"]
-    return max(0.0, 1 - violations / 10)
+    """Sigmoid on 5'UTR-only violation count (fewer violations → 1.0).
+
+    Midpoint at 1 violation; ~0.88 at 0 violations, ~0.12 at 2+ violations.
+    """
+    mfg = report["manufacturing_scores"]
+    violations = mfg.get("utr5_violations", mfg["total_violations"])
+    return _sigmoid(violations, midpoint=1.0, k=-2.0)
 
 
 def _normalise_stability(report: dict) -> float:
-    """Use the combined stability score directly (already 0-1)."""
-    return report.get("stability_scores", {}).get("stability_score", 0.5)
+    """Sigmoid on the combined stability score (higher → 1.0).
+
+    Midpoint at 0.6; transitions from ~0.31 at 0.5 to ~0.92 at 0.9.
+    """
+    score = report.get("stability_scores", {}).get("stability_score", 0.5)
+    return _sigmoid(score, midpoint=0.6, k=8.0)
 
 
 def _normalise_te(report: dict) -> float:
-    """1.0 if mean TE >= 2.0, linear to 0 at 0.5; None → 0.5 (neutral)."""
-    mean_te = report.get("ribonn_scores", {}).get("mean_te")
-    if mean_te is None:
-        return 0.5  # no data — neutral
-    if mean_te >= 2.0:
-        return 1.0
-    elif mean_te <= 0.5:
-        return 0.0
-    return (mean_te - 0.5) / 1.5
+    """Sigmoid on absolute target-tissue TE (higher → 1.0).
+
+    RiboNN TE values observed across cell types typically range 0.1–2.5, with
+    the CDS dominating the prediction and the 5'UTR contributing only ~1% of
+    the variance between candidates in a single run.  The metric is therefore
+    most useful for **final ranking** rather than as an optimisation gradient.
+
+    Midpoint at 1.0; k=6 → ~3× more gradient per TE unit compared to the
+    previous (midpoint=1.2, k=3) setting, giving NSGA-III a stronger
+    directional signal in the practically achievable 5'UTR-tuning range
+    (typically 0.8–1.6 TE units).  Score ~0.5 at TE=1.0, ~0.27 at TE=0.8,
+    ~0.73 at TE=1.2, ~0.88 at TE=1.4.
+    """
+    ribonn = report["ribonn_scores"]
+    target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
+    return _sigmoid(target_te, midpoint=1.0, k=6.0)
 
 
 NORMALISERS = {
     "utr5_accessibility": _normalise_utr5,
     "manufacturability": _normalise_manufacturing,
     "stability": _normalise_stability,
-    "translation_efficiency": _normalise_te,
+    "specificity": _normalise_te,
 }
 
 
@@ -111,17 +138,21 @@ def _generate_suggestions(report: dict, scores: dict) -> list[dict]:
 
 def _suggestion_for(metric: str, report: dict) -> str | None:
     if metric == "utr5_accessibility":
-        mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
-        if mfe is not None:
-            return f"Reduce 5'UTR secondary structure (current MFE: {mfe:.1f}, target: > -20 kcal/mol)"
+        d = report["structure_scores"]["utr5_accessibility"]
+        val = d.get("mfe_per_nt")
+        if val is not None:
+            return f"Reduce 5'UTR secondary structure (current MFE/nt: {val:.3f}, target: >= -0.1 kcal/mol/nt)"
         return None
 
     if metric == "manufacturability":
         mfg = report["manufacturing_scores"]
         parts = []
+        uorf_v = mfg.get("uorfs", {}).get("count", 0)
         gc_v = len(mfg["gc_windows"]["violations"])
         hp_v = len(mfg["homopolymers"]["violations"])
         rs_v = len(mfg["restriction_sites"]["violations"])
+        if uorf_v:
+            parts.append(f"{uorf_v} upstream AUG(s) (uORFs reduce main-ORF translation)")
         if gc_v:
             parts.append(f"{gc_v} high-GC windows")
         if hp_v:
@@ -137,17 +168,16 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         parts = []
         if stab.get("gc3", 0) < 0.5:
             parts.append(f"increase GC3 wobble content (current: {stab['gc3']:.1%})")
-        if stab.get("au_rich_elements", 0) > 0:
-            parts.append(f"remove {stab['au_rich_elements']} AU-rich elements from 3'UTR")
         if stab.get("mfe_per_nt", 0) > -0.3:
             parts.append("increase thermodynamic stability")
         return "Improve stability: " + ", ".join(parts) if parts else "Improve overall mRNA stability"
 
-    if metric == "translation_efficiency":
-        ribonn = report.get("ribonn_scores", {})
-        if not ribonn.get("available", False):
-            return "Install RiboNN (set RIBONN_DIR) for translation efficiency predictions"
-        mean_te = ribonn.get("mean_te", 0)
-        return f"Optimise 5'UTR and codon usage for higher translation efficiency (current mean TE: {mean_te:.2f}, target: >= 1.5)"
+    if metric == "specificity":
+        ribonn = report["ribonn_scores"]
+        target = ribonn.get("target_cell_type", "target")
+        target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
+        return (
+            f"Improve {target} TE = {target_te:.2f} (target: >= 1.5)"
+        )
 
     return None

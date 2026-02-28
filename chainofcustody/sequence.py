@@ -5,10 +5,24 @@ from dataclasses import dataclass
 # Kozak consensus sequence inserted between the 5'UTR and the CDS start codon.
 KOZAK = "GCCACC"
 
+# 5' cap analogue (CleanCap-AG / ARCA): contributes a GGG trinucleotide at the
+# transcript 5' end in sequence notation.  The actual structure is a
+# m7GpppG(2'-O-methyl) cap; GGG is the canonical sequence representation used
+# in mRNA therapeutic design.
+CAP5 = "GGG"
+
 
 @dataclass
 class mRNASequence:
-    """An mRNA sequence split into its three functional regions."""
+    """An mRNA sequence split into its three functional regions.
+
+    ``__str__`` / ``__len__`` return only the core transcript
+    (5'UTR + CDS + 3'UTR), which is the region used for structure
+    prediction and all scoring metrics.
+
+    Use :attr:`full_sequence` to obtain the complete molecule
+    including the 5' cap and poly-A tail.
+    """
     utr5: str
     cds: str
     utr3: str
@@ -26,16 +40,27 @@ class mRNASequence:
     def cds_end(self) -> int:
         return len(self.utr5) + len(self.cds)
 
+    @property
+    def full_sequence(self) -> str:
+        """Complete mRNA molecule: 5' cap + core transcript + poly-A tail."""
+        return CAP5 + self.utr5 + self.cds + self.utr3
+
+    @property
+    def full_length(self) -> int:
+        """Total length including 5' cap and poly-A tail."""
+        return len(CAP5) + len(self)
+
     def __len__(self) -> int:
         return len(self.utr5) + len(self.cds) + len(self.utr3)
 
     def __repr__(self) -> str:
         return (
             f"mRNASequence("
-            f"utr5={len(self.utr5)}nt, "
-            f"cds={len(self.cds)}nt, "
-            f"utr3={len(self.utr3)}nt, "
-            f"total={len(self)}nt)"
+            f"cap={len(CAP5)}nt + "
+            f"utr5={len(self.utr5)}nt + "
+            f"cds={len(self.cds)}nt + "
+            f"utr3={len(self.utr3)}nt + "
+            f"total={self.full_length}nt)"
         )
 
     def __str__(self) -> str:
