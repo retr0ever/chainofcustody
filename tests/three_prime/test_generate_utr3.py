@@ -89,3 +89,12 @@ class TestGenerateMrnaSpongeUtr:
         seed_match = rc[-8:]
         result = generate_mrna_sponge_utr([_MIR122])
         assert seed_match in result["single_sites"][0]
+
+    def test_empty_sequence_raises_value_error(self):
+        with pytest.raises(ValueError, match="too short"):
+            generate_mrna_sponge_utr([""])
+
+    def test_too_short_sequence_raises_value_error(self):
+        """Sequences under 12 nt cannot form seed, bulge, and 3'-match regions."""
+        with pytest.raises(ValueError, match="too short"):
+            generate_mrna_sponge_utr(["AUGCAUGC"])  # 8 nt

@@ -132,6 +132,10 @@ def mirnas_for_off_target_cell_type(
         "shannon_entropy": candidates["shannon_entropy"].values,
     }).reset_index(drop=True)
 
+    # Drop rows whose sequence is missing from the lookup — they cannot be used
+    # downstream to build sponge sites and would cause a ValueError there.
+    result = result[result["mature_sequence"] != ""].reset_index(drop=True)
+
     return result
 
 

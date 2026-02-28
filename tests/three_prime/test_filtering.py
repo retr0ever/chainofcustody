@@ -108,12 +108,20 @@ class TestMirnasForOffTargetCellType:
         for _, row in result.iterrows():
             assert row["mature_sequence"] == mature_seqs[row["MiRBase_ID"]]
 
-    def test_unknown_mirna_gets_empty_sequence(self, three_mirna_data):
-        """miRNAs missing from the mature_seqs dict get an empty string."""
+    def test_mirnas_missing_from_sequence_lookup_are_excluded(self, three_mirna_data):
+        """miRNAs absent from mature_seqs must be dropped, not returned with empty sequences."""
         mature_seqs, df_expr, df_grouped = three_mirna_data
         sparse_seqs = {}  # nothing in lookup
         result = mirnas_for_off_target_cell_type("Liver", sparse_seqs, df_expr, df_grouped)
-        assert (result["mature_sequence"] == "").all()
+        assert result.empty
+
+    def test_partial_sequence_lookup_excludes_missing_only(self, three_mirna_data):
+        """Only miRNAs that have a known sequence are returned."""
+        mature_seqs, df_expr, df_grouped = three_mirna_data
+        partial_seqs = {"hsa-miR-1": "UGGAGUGUGACAAUGGUGUUUG"}  # only miR-1 known
+        result = mirnas_for_off_target_cell_type("Liver", partial_seqs, df_expr, df_grouped)
+        assert list(result["MiRBase_ID"]) == ["hsa-miR-1"]
+        assert (result["mature_sequence"] != "").all()
 
     def test_invalid_off_target_cell_type_raises_value_error(self, three_mirna_data):
         mature_seqs, df_expr, df_grouped = three_mirna_data
