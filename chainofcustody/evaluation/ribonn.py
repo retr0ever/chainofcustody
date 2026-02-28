@@ -120,6 +120,12 @@ def _encode_sequences_vectorized(
 ) -> tuple[torch.Tensor, list[bool]]:
     """Encode a batch of mRNA sequences into the RiboNN input tensor format.
 
+    Encodes the full transcript (5'UTR + CDS + UTR3) as the model was trained
+    on.  Since the CDS and 3'UTR are **fixed** across all candidates in the
+    optimiser, they do not bias pairwise comparisons — only the 5'UTR varies.
+    Providing the full sequence keeps the model in-distribution, yielding
+    grounded absolute TE predictions.
+
     Builds a ``(N, 5, 13318)`` float32 tensor on CPU using vectorized numpy
     operations, then returns it as a pinned-memory tensor ready for GPU
     transfer.  Sequences that exceed the model's length limits are skipped;

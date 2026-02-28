@@ -3,10 +3,10 @@
 import math
 
 DEFAULT_WEIGHTS = {
-    "utr5_accessibility": 0.2,
-    "manufacturability": 0.2,
-    "stability": 0.2,
-    "specificity": 0.4,
+    "utr5_accessibility": 0.15,
+    "manufacturability": 0.30,
+    "stability": 0.20,
+    "specificity": 0.35,
 }
 
 
@@ -54,20 +54,18 @@ def _normalise_stability(report: dict) -> float:
 def _normalise_te(report: dict) -> float:
     """Sigmoid on absolute target-tissue TE (higher → 1.0).
 
-    The tissue-specific differential (target vs off-target) is dominated by
-    the fixed CDS and provides essentially no gradient when only the 5'UTR
-    is evolved — all candidates score nearly identically on the differential.
+    RiboNN TE values observed across cell types typically range 0.1–2.5, with
+    the CDS dominating the prediction and the 5'UTR contributing only ~1% of
+    the variance between candidates in a single run.  The metric is therefore
+    most useful for **final ranking** rather than as an optimisation gradient.
 
-    Instead we score on absolute *target_te*: the 5'UTR does influence overall
-    ribosome loading efficiency (through accessibility), so maximising absolute
-    TE in the target tissue is both achievable and meaningful.
-
-    Sigmoid midpoint at 2.0; k=1.5 → gentle transition providing gradient
-    across the typical achievable range of 1.5–3.5.
+    Midpoint at 1.2; k=3 → sensitive across 0.5–2.0 (the practically
+    achievable range), with score ~0.5 at TE=1.2, ~0.25 at TE=0.8, ~0.75
+    at TE=1.6.
     """
     ribonn = report["ribonn_scores"]
     target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
-    return _sigmoid(target_te, midpoint=2.0, k=1.5)
+    return _sigmoid(target_te, midpoint=1.2, k=3.0)
 
 
 NORMALISERS = {
@@ -147,9 +145,12 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
     if metric == "manufacturability":
         mfg = report["manufacturing_scores"]
         parts = []
+        uorf_v = mfg.get("uorfs", {}).get("count", 0)
         gc_v = len(mfg["gc_windows"]["violations"])
         hp_v = len(mfg["homopolymers"]["violations"])
         rs_v = len(mfg["restriction_sites"]["violations"])
+        if uorf_v:
+            parts.append(f"{uorf_v} upstream AUG(s) (uORFs reduce main-ORF translation)")
         if gc_v:
             parts.append(f"{gc_v} high-GC windows")
         if hp_v:
@@ -173,10 +174,8 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         ribonn = report["ribonn_scores"]
         target = ribonn.get("target_cell_type", "target")
         target_te = ribonn.get("target_te", ribonn.get("mean_te", 0.0))
-        mean_off = ribonn.get("mean_off_target_te", 0.0)
         return (
-            f"Improve {target} TE = {target_te:.2f} (target: >= 2.5); "
-            f"mean off-target = {mean_off:.2f}"
+            f"Improve {target} TE = {target_te:.2f} (target: >= 1.5)"
         )
 
     return None

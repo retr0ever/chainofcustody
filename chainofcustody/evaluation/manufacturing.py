@@ -115,12 +115,49 @@ def check_restriction_sites(seq: str, sites: dict[str, str] | None = None) -> di
     }
 
 
+def check_uorfs(utr5_seq: str) -> dict:
+    """Detect upstream open reading frames (uORFs) in the 5'UTR.
+
+    Any AUG triplet in the 5'UTR initiates a competing ribosome scanning
+    event.  Even out-of-frame uORFs redirect ribosomes and substantially
+    reduce translation of the main ORF.  Minimising the number of upstream
+    AUGs is one of the most actionable levers for improving 5'UTR translation
+    efficiency.
+
+    Parameters
+    ----------
+    utr5_seq : str
+        5'UTR sequence in RNA alphabet (A/U/G/C), **not** including the Kozak
+        or the main AUG start codon.
+
+    Returns
+    -------
+    dict with keys
+        ``count``      — number of AUG triplets found
+        ``positions``  — list of 0-based positions
+        ``pass``       — True if no upstream AUGs are present
+        ``violations`` — list of dicts (position, sequence) for the report
+    """
+    seq = utr5_seq.upper().replace("T", "U")
+    violations = []
+    for m in re.finditer("AUG", seq):
+        violations.append({"position": m.start(), "sequence": "AUG"})
+    return {
+        "pass": len(violations) == 0,
+        "count": len(violations),
+        "positions": [v["position"] for v in violations],
+        "violations": violations,
+    }
+
+
 def score_manufacturing(parsed: mRNASequence) -> dict:
     """Run all manufacturability checks.
 
     Violations are computed on the full assembled mRNA for reporting purposes.
     ``utr5_violations`` counts only violations within the 5'UTR — the region
     the optimiser actually controls — and is used by the fitness normaliser.
+    uORFs (upstream AUGs) are a 5'UTR-only check and are included in
+    ``utr5_violations`` but not the full-sequence counts.
     """
     seq = str(parsed)
 
@@ -137,14 +174,22 @@ def score_manufacturing(parsed: mRNASequence) -> dict:
         gc_u = check_gc_windows(utr5_seq)
         hp_u = check_homopolymers(utr5_seq)
         rs_u = check_restriction_sites(utr5_seq)
-        utr5_violations = len(gc_u["violations"]) + len(hp_u["violations"]) + len(rs_u["violations"])
+        uorf_u = check_uorfs(utr5_seq)
+        utr5_violations = (
+            len(gc_u["violations"])
+            + len(hp_u["violations"])
+            + len(rs_u["violations"])
+            + uorf_u["count"]
+        )
     else:
+        uorf_u = check_uorfs("")
         utr5_violations = 0
 
     return {
         "gc_windows": gc,
         "homopolymers": homopolymers,
         "restriction_sites": restriction,
+        "uorfs": uorf_u,
         "total_violations": total_violations,
         "utr5_violations": utr5_violations,
         "overall_pass": total_violations == 0,

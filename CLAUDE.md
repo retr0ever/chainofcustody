@@ -11,7 +11,7 @@ chainofcustody/
   cds/                # Gene fetching from Ensembl (get_canonical_cds)
   evaluation/          # 4-metric scoring pipeline
     structure.py       # Metric 1: ViennaRNA folding (5'UTR accessibility, global MFE)
-    manufacturing.py   # Metric 2: GC windows, homopolymers, restriction sites
+    manufacturing.py   # Metric 2: GC windows, homopolymers, restriction sites, uORFs
     stability.py       # Metric 3: GC3, MFE/nt, AU-rich elements
     ribonn.py          # Metric 4: RiboNN translation efficiency (optional, subprocess)
     scoring.py         # Pipeline orchestrator: runs all metrics, builds report + summary
@@ -57,13 +57,25 @@ The summary table shows **normalised 0-1 scores** (higher = better) for all metr
 | Metric | Weight | GREEN threshold | What it measures |
 |---|---|---|---|
 | utr5_accessibility | 35% | MFE/nt >= -0.1 | 5'UTR accessibility (sigmoid midpoint=-0.2, k=15) |
-| manufacturability | 20% | 0 UTR violations | DNA synthesis feasibility (sigmoid midpoint=1, k=-2) |
-| stability | 25% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt; sigmoid midpoint=0.6, k=8) |
-| specificity | 20% | target TE >= 2.5 | Absolute RiboNN target-tissue TE (sigmoid midpoint=2.0, k=1.5) |
+| manufacturability | 30% | 0 UTR violations | GC windows, homopolymers, restriction sites, uORFs (sigmoid midpoint=1, k=-2) |
+| stability | 20% | Combined >= 0.7 | mRNA half-life (GC3, MFE/nt; sigmoid midpoint=0.6, k=8) |
+| specificity | 15% | target TE >= 1.5 | Absolute RiboNN target-tissue TE (sigmoid midpoint=1.2, k=3) |
 
-Note: tissue specificity (target vs off-target TE differential) is not used as the
-primary metric because it is dominated by the fixed CDS and provides no gradient when
-only the 5'UTR is evolved. Absolute target TE is optimised instead.
+**Why these weights:** RiboNN TE varies by <1% across candidates in a single run (the fixed CDS
+dominates the prediction, the 5'UTR contributes ~0.01 TE units of variance). TE is therefore most
+useful for final **ranking** rather than as an optimisation gradient. The real actionable levers are:
+
+1. **utr5_accessibility (35%)** — 5'UTR secondary structure directly controls ribosome scanning rate.
+   An accessible cap-proximal region is the strongest single lever available to the 5'UTR optimizer.
+2. **manufacturability (30%)** — includes uORF penalty: upstream AUGs in the 5'UTR create competing
+   ORFs that dramatically reduce main-ORF translation. Eliminating uORFs is biologically actionable
+   and produces a real gradient signal.
+3. **stability (20%)** — mRNA half-life amplifies total protein output independently of translation rate.
+4. **specificity (15%)** — RiboNN TE in the target tissue; low weight because gradient is minimal,
+   but still used for final candidate ranking.
+
+Note: tissue specificity (target vs off-target TE differential) is not used because it is dominated
+by the fixed CDS and provides no gradient when only the 5'UTR is evolved.
 
 ### Target cell type flow
 

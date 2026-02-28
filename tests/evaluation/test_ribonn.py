@@ -1,11 +1,15 @@
 import pandas as pd
+import numpy as np
 import pytest
 
 from chainofcustody.sequence import mRNASequence
 from chainofcustody.evaluation.ribonn import (
     _RIBONN_DIR,
+    _MAX_UTR5_LEN,
+    _MAX_CDS_UTR3_LEN,
     _null_result,
     _te_status,
+    _encode_sequences_vectorized,
     score_ribonn,
     score_ribonn_batch,
 )
@@ -102,3 +106,79 @@ def test_score_ribonn_result_keys(mocker):
     assert {"mean_te", "target_cell_type", "target_te", "mean_off_target_te", "per_tissue", "status", "message"}.issubset(result.keys())
     assert all(not k.startswith("predicted_") for k in (result["per_tissue"] or {}))
     assert all(not k.startswith("TE_") for k in (result["per_tissue"] or {}))
+
+
+# ── Encoding ─────────────────────────────────────────────────────────────────
+
+def test_encode_full_sequence():
+    """The full transcript (5'UTR + CDS + UTR3) must be encoded."""
+    utr5 = "AUGCCC"   # 6 nt
+    cds  = "AUGCCCAAGUAA"  # 12 nt
+    utr3 = "CCCCCCCCCC"   # 10 nt
+    seq = mRNASequence(utr5=utr5, cds=cds, utr3=utr3)
+    tensor, valid = _encode_sequences_vectorized([seq])
+
+    assert valid[0] is True
+    arr = tensor.numpy()  # (1, 5, _PADDED_LEN)
+
+    # CDS starts at _MAX_UTR5_LEN; first few positions should be non-zero
+    cds_start = _MAX_UTR5_LEN
+    assert arr[0, :4, cds_start : cds_start + len(cds)].sum() > 0, (
+        "CDS region should be encoded"
+    )
+
+
+def test_encode_codon_start_mask_is_set():
+    """Channel 4 must mark the first nucleotide of every CDS codon."""
+    utr5 = "AAAAAA"       # 6 nt
+    cds  = "AUGCCCAAGUAA" # 12 nt → 4 codons → 4 codon-start positions
+    seq = mRNASequence(utr5=utr5, cds=cds, utr3="")
+    tensor, valid = _encode_sequences_vectorized([seq])
+
+    assert valid[0] is True
+    arr = tensor.numpy()
+    cds_start = _MAX_UTR5_LEN
+    cds_len = len(cds)
+    expected_positions = list(range(cds_start, cds_start + cds_len - 3 + 1, 3))
+    assert arr[0, 4, expected_positions].sum() == len(expected_positions)
+    # No codon-start marks outside the CDS
+    mask_sum = arr[0, 4, :].sum()
+    assert mask_sum == len(expected_positions)
+
+
+def test_encode_utr5_is_right_aligned():
+    """The 5'UTR must be right-aligned so it ends at position _MAX_UTR5_LEN - 1."""
+    utr5 = "AAUU"   # 4 nt
+    seq = mRNASequence(utr5=utr5, cds="AUGAAGUAA", utr3="")
+    tensor, valid = _encode_sequences_vectorized([seq])
+
+    assert valid[0]
+    arr = tensor.numpy()
+    utr5_len = len(utr5)
+
+    # The 4 nt should occupy columns [_MAX_UTR5_LEN - 4, _MAX_UTR5_LEN - 1]
+    occupied = arr[0, :4, _MAX_UTR5_LEN - utr5_len : _MAX_UTR5_LEN]
+    assert occupied.sum() == utr5_len, "Each of the 4 nt positions should have exactly one hot channel"
+
+    # Positions before the 5'UTR should be zero
+    assert np.all(arr[0, :4, : _MAX_UTR5_LEN - utr5_len] == 0.0)
+
+
+def test_encode_utr5_too_long_is_invalid():
+    """Sequences whose 5'UTR exceeds _MAX_UTR5_LEN must be marked invalid."""
+    long_utr5 = "A" * (_MAX_UTR5_LEN + 1)
+    seq = mRNASequence(utr5=long_utr5, cds="AUGAAGUAA", utr3="")
+    tensor, valid = _encode_sequences_vectorized([seq])
+
+    assert valid[0] is False
+    assert np.all(tensor.numpy()[0] == 0.0)
+
+
+def test_encode_cds_too_long_is_invalid():
+    """Sequences whose CDS+UTR3 exceeds _MAX_CDS_UTR3_LEN must be marked invalid."""
+    long_cds = "AUGCCC" * 2000 + "UAA"   # well over _MAX_CDS_UTR3_LEN
+    seq = mRNASequence(utr5="AAAAAA", cds=long_cds, utr3="")
+    tensor, valid = _encode_sequences_vectorized([seq])
+
+    assert valid[0] is False
+    assert np.all(tensor.numpy()[0] == 0.0)
