@@ -59,7 +59,7 @@ def mock_scoring(mocker):
         "structure_scores": {"utr5_accessibility": {"mfe": None, "status": "GREY"}, "global_mfe": {"mfe": -1.0, "mfe_per_nt": -0.25}},
         "manufacturing_scores": {"total_violations": 0, "overall_pass": True, "gc_windows": {"pass": True, "violations": []}, "homopolymers": {"pass": True, "violations": []}, "restriction_sites": {"pass": True, "violations": []}},
         "stability_scores": {"gc3": 0.5, "mfe_per_nt": -0.3, "au_rich_elements": 0, "stability_score": 0.7, "status": "GREEN"},
-        "ribonn_scores": {"available": False, "mean_te": None, "per_tissue": None, "status": "GREY", "message": "RiboNN not available"},
+        "ribonn_scores": {"mean_te": 1.8, "per_tissue": None, "status": "GREEN", "message": "RiboNN predicted mean TE = 1.8000"},
         "summary": {"utr5_accessibility": "GREY", "manufacturability": "GREEN", "stability": "GREEN", "translation_efficiency": "GREY"},
     }
     mock_fitness = {

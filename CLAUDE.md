@@ -74,7 +74,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Mocking rules:**
 - Mock `score_parsed` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
 - Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
-- The mock report dict must include all top-level keys: `sequence_info`, `structure_scores`, `manufacturing_scores`, `stability_scores`, `ribonn_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
+- The mock report dict must include all top-level keys: `sequence_info`, `structure_scores`, `manufacturing_scores`, `stability_scores`, `ribonn_scores`, and `summary`. `ribonn_scores` must contain `mean_te` (float), `status`, and `message`.
 
 
 **Test structure:**
@@ -112,4 +112,4 @@ fitness = compute_fitness(report)
 ## Dependencies requiring system install
 
 - **ViennaRNA** (`viennarna`): RNA secondary structure folding. Required for metrics 1 (structure) and 3 (stability). Install via conda or system package manager if pip install fails.
-- **RiboNN** (optional): Translation efficiency prediction. Included as a git submodule at `vendor/RiboNN`. Initialise with `git submodule update --init vendor/RiboNN`, then set `RIBONN_DIR=$(pwd)/vendor/RiboNN`. Requires PyTorch. The metric degrades gracefully to GREY/0.5 when unavailable.
+- **RiboNN**: Translation efficiency prediction. Bundled as a git submodule at `vendor/RiboNN`. Initialise with `git submodule update --init vendor/RiboNN`. Requires PyTorch (already in the venv).

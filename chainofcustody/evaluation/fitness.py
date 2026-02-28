@@ -32,10 +32,8 @@ def _normalise_stability(report: dict) -> float:
 
 
 def _normalise_te(report: dict) -> float:
-    """1.0 if mean TE >= 2.0, linear to 0 at 0.5; None → 0.5 (neutral)."""
-    mean_te = report.get("ribonn_scores", {}).get("mean_te")
-    if mean_te is None:
-        return 0.5  # no data — neutral
+    """1.0 if mean TE >= 2.0, linear to 0 at 0.5."""
+    mean_te = report["ribonn_scores"]["mean_te"]
     if mean_te >= 2.0:
         return 1.0
     elif mean_te <= 0.5:
@@ -144,10 +142,7 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         return "Improve stability: " + ", ".join(parts) if parts else "Improve overall mRNA stability"
 
     if metric == "translation_efficiency":
-        ribonn = report.get("ribonn_scores", {})
-        if not ribonn.get("available", False):
-            return "Install RiboNN (set RIBONN_DIR) for translation efficiency predictions"
-        mean_te = ribonn.get("mean_te", 0)
+        mean_te = report["ribonn_scores"]["mean_te"]
         return f"Optimise 5'UTR and codon usage for higher translation efficiency (current mean TE: {mean_te:.2f}, target: >= 1.5)"
 
     return None

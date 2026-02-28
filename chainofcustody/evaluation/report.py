@@ -67,13 +67,10 @@ def format_report(report: dict) -> str:
         lines.append(f"- **Stability score:** {stab.get('stability_score', 0):.2f}")
     lines.append("")
 
-    ribonn = report.get("ribonn_scores", {})
+    ribonn = report["ribonn_scores"]
     lines.append("## 4. Translation Efficiency")
-    if ribonn.get("available"):
-        lines.append(f"- **Mean TE:** {ribonn.get('mean_te', 0):.4f}")
-        lines.append(f"- **Status:** {ribonn.get('status', 'GREY')}")
-    else:
-        lines.append(f"- **Status:** unavailable ({ribonn.get('message', 'RiboNN not installed')})")
+    lines.append(f"- **Mean TE:** {ribonn['mean_te']:.4f}")
+    lines.append(f"- **Status:** {ribonn['status']}")
 
     return "\n".join(lines)
 
@@ -115,10 +112,7 @@ def _metric_hint(metric: str, report: dict) -> str:
         stab = report.get("stability_scores", {})
         return f"GC3 {stab.get('gc3', 0):.0%}, {stab.get('au_rich_elements', 0)} AREs"
     if metric == "translation_efficiency":
-        ribonn = report.get("ribonn_scores", {})
-        if not ribonn.get("available", False):
-            return "RiboNN unavailable"
-        return f"mean TE {ribonn.get('mean_te', 0):.2f}"
+        return f"mean TE {report['ribonn_scores']['mean_te']:.2f}"
     return ""
 
 
@@ -202,14 +196,11 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
         console.print(f"  [dim]Combined score  {stab.get('stability_score', 0):.2f}[/]")
         console.print()
 
-    ribonn = report.get("ribonn_scores", {})
-    if summary.get("translation_efficiency") != "GREEN" and ribonn:
+    ribonn = report["ribonn_scores"]
+    if summary.get("translation_efficiency") != "GREEN":
         console.print(Rule("Translation Efficiency", style="dim"))
-        if ribonn.get("available"):
-            console.print(f"  [bold]Mean TE  {ribonn.get('mean_te', 0):.4f}[/]")
-            console.print(f"  [dim]{ribonn.get('message', '')}[/]")
-        else:
-            console.print(f"  [dim]{ribonn.get('message', 'RiboNN not available')}[/]")
+        console.print(f"  [bold]Mean TE  {ribonn['mean_te']:.4f}[/]")
+        console.print(f"  [dim]{ribonn.get('message', '')}[/]")
         console.print()
 
     if fitness["suggestions"]:

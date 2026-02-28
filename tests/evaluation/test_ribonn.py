@@ -3,10 +3,17 @@ import subprocess
 import pytest
 
 from chainofcustody.sequence import mRNASequence
-from chainofcustody.evaluation.ribonn import score_ribonn, _te_status, _parse_output
+from chainofcustody.evaluation.ribonn import score_ribonn, _te_status, _parse_output, _RIBONN_DIR
 
 
 _PARSED = mRNASequence(utr5="AAAAAA", cds="AUGCCCAAGUAA", utr3="CCCGGG")
+
+
+# ── Submodule path ───────────────────────────────────────────────────────────
+
+def test_submodule_dir_points_to_vendor():
+    assert _RIBONN_DIR.name == "RiboNN"
+    assert (_RIBONN_DIR / "src" / "main.py").exists()
 
 
 # ── Status thresholds ────────────────────────────────────────────────────────
@@ -26,115 +33,91 @@ def test_te_status_red():
     assert _te_status(0.0) == "RED"
 
 
-# ── Graceful fallback ────────────────────────────────────────────────────────
-
-def test_unavailable_when_no_env_var(monkeypatch):
-    monkeypatch.delenv("RIBONN_DIR", raising=False)
-    # Reset cached dir
-    import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
-
-    result = score_ribonn(_PARSED)
-
-    assert result["available"] is False
-    assert result["mean_te"] is None
-    assert result["status"] == "GREY"
-
-
-def test_unavailable_when_dir_missing(monkeypatch, tmp_path):
-    monkeypatch.setenv("RIBONN_DIR", str(tmp_path / "nonexistent"))
-    import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
-
-    result = score_ribonn(_PARSED)
-
-    assert result["available"] is False
-    assert result["status"] == "GREY"
-
-
-def test_unavailable_when_no_main_py(monkeypatch, tmp_path):
-    # Dir exists but no src/main.py
-    monkeypatch.setenv("RIBONN_DIR", str(tmp_path))
-    import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
-
-    result = score_ribonn(_PARSED)
-
-    assert result["available"] is False
-    assert result["status"] == "GREY"
-
-
 # ── Subprocess mocking ───────────────────────────────────────────────────────
 
-def test_successful_prediction(monkeypatch, tmp_path, mocker):
-    # Set up a fake RiboNN dir
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
-    (src_dir / "main.py").write_text("")
+def _fake_ribonn_dir(tmp_path):
+    """Create a minimal fake RiboNN directory layout."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("")
     (tmp_path / "data").mkdir()
+    return tmp_path
 
-    monkeypatch.setenv("RIBONN_DIR", str(tmp_path))
-    import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
 
-    # Mock subprocess.run to succeed
+def test_successful_prediction(tmp_path, mocker):
+    ribonn_dir = _fake_ribonn_dir(tmp_path)
+
     mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
         args=[], returncode=0, stdout="", stderr="",
     ))
 
-    # Create fake output
-    results_dir = tmp_path / "results" / "human"
+    results_dir = ribonn_dir / "results" / "human"
     results_dir.mkdir(parents=True)
     (results_dir / "prediction_output.txt").write_text(
         "tx_id\tutr5_sequence\tcds_sequence\tutr3_sequence\tpredicted_HeLa\tpredicted_HepG2\tmean_predicted_TE\n"
         "query\tAAAAAA\tAUGCCCAAGUAA\tCCCGGG\t1.8\t1.2\t1.5\n"
     )
 
-    result = score_ribonn(_PARSED)
+    result = score_ribonn.__wrapped__(_PARSED) if hasattr(score_ribonn, "__wrapped__") else \
+        __import__("chainofcustody.evaluation.ribonn", fromlist=["_run_ribonn"])._run_ribonn(_PARSED, ribonn_dir)
 
-    assert result["available"] is True
     assert result["mean_te"] == 1.5
     assert result["status"] == "GREEN"
     assert result["per_tissue"]["HeLa"] == 1.8
     assert result["per_tissue"]["HepG2"] == 1.2
+    assert "available" not in result
 
 
-def test_subprocess_failure(monkeypatch, tmp_path, mocker):
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
-    (src_dir / "main.py").write_text("")
-    (tmp_path / "data").mkdir()
-
-    monkeypatch.setenv("RIBONN_DIR", str(tmp_path))
-    import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
+def test_subprocess_failure_raises(tmp_path, mocker):
+    ribonn_dir = _fake_ribonn_dir(tmp_path)
 
     mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
         args=[], returncode=1, stdout="", stderr="Model not found",
     ))
 
-    result = score_ribonn(_PARSED)
-
-    assert result["available"] is False
-    assert result["status"] == "GREY"
-
-
-def test_subprocess_timeout(monkeypatch, tmp_path, mocker):
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
-    (src_dir / "main.py").write_text("")
-    (tmp_path / "data").mkdir()
-
-    monkeypatch.setenv("RIBONN_DIR", str(tmp_path))
     import chainofcustody.evaluation.ribonn as mod
-    mod._RIBONN_DIR = None
+    with pytest.raises(RuntimeError, match="RiboNN exited with code 1"):
+        mod._run_ribonn(_PARSED, ribonn_dir)
+
+
+def test_subprocess_timeout_propagates(tmp_path, mocker):
+    ribonn_dir = _fake_ribonn_dir(tmp_path)
 
     mocker.patch(
         "chainofcustody.evaluation.ribonn.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="python3", timeout=300),
     )
 
-    result = score_ribonn(_PARSED)
+    import chainofcustody.evaluation.ribonn as mod
+    with pytest.raises(subprocess.TimeoutExpired):
+        mod._run_ribonn(_PARSED, ribonn_dir)
 
-    assert result["available"] is False
-    assert result["status"] == "GREY"
+
+def test_missing_output_raises(tmp_path, mocker):
+    ribonn_dir = _fake_ribonn_dir(tmp_path)
+
+    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
+        args=[], returncode=0, stdout="", stderr="",
+    ))
+
+    import chainofcustody.evaluation.ribonn as mod
+    with pytest.raises(RuntimeError, match="output file not found"):
+        mod._run_ribonn(_PARSED, ribonn_dir)
+
+
+# ── Input file backup/restore ────────────────────────────────────────────────
+
+def test_existing_input_is_restored_after_run(tmp_path, mocker):
+    ribonn_dir = _fake_ribonn_dir(tmp_path)
+    input_path = ribonn_dir / "data" / "prediction_input1.txt"
+    original_content = "original data\n"
+    input_path.write_text(original_content)
+
+    mocker.patch("chainofcustody.evaluation.ribonn.subprocess.run", return_value=subprocess.CompletedProcess(
+        args=[], returncode=1, stdout="", stderr="fail",
+    ))
+
+    import chainofcustody.evaluation.ribonn as mod
+    with pytest.raises(RuntimeError):
+        mod._run_ribonn(_PARSED, ribonn_dir)
+
+    assert input_path.read_text() == original_content
