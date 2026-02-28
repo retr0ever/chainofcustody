@@ -135,8 +135,6 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         parts = []
         if stab.get("gc3", 0) < 0.5:
             parts.append(f"increase GC3 wobble content (current: {stab['gc3']:.1%})")
-        if stab.get("au_rich_elements", 0) > 0:
-            parts.append(f"remove {stab['au_rich_elements']} AU-rich elements from 3'UTR")
         if stab.get("mfe_per_nt", 0) > -0.3:
             parts.append("increase thermodynamic stability")
         return "Improve stability: " + ", ".join(parts) if parts else "Improve overall mRNA stability"

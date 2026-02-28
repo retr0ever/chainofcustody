@@ -63,7 +63,6 @@ def format_report(report: dict) -> str:
         lines.append("## 3. Stability")
         lines.append(f"- **GC3 (wobble position):** {stab.get('gc3', 0):.1%}")
         lines.append(f"- **MFE per nt:** {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
-        lines.append(f"- **AU-rich elements:** {stab.get('au_rich_elements', 0)} in 3'UTR")
         lines.append(f"- **Stability score:** {stab.get('stability_score', 0):.2f}")
     lines.append("")
 
@@ -110,7 +109,7 @@ def _metric_hint(metric: str, report: dict) -> str:
         return f"{v} violation{'s' if v != 1 else ''}"
     if metric == "stability":
         stab = report.get("stability_scores", {})
-        return f"GC3 {stab.get('gc3', 0):.0%}, {stab.get('au_rich_elements', 0)} AREs"
+        return f"GC3 {stab.get('gc3', 0):.0%}, MFE/nt {stab.get('mfe_per_nt', 0):.3f}"
     if metric == "translation_efficiency":
         return f"mean TE {report['ribonn_scores']['mean_te']:.2f}"
     return ""
@@ -191,8 +190,6 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
         console.print(Rule("Stability", style="dim"))
         console.print(f"  [bold]GC3 (wobble position)  {stab.get('gc3', 0):.1%}[/]")
         console.print(f"  MFE per nt  {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
-        are = stab.get("au_rich_elements", 0)
-        console.print(f"  [{'yellow' if are > 0 else 'green'}]AU-rich elements  {are if are > 0 else 'none'}[/]")
         console.print(f"  [dim]Combined score  {stab.get('stability_score', 0):.2f}[/]")
         console.print()
 
@@ -270,7 +267,7 @@ def _print_score_legend(console: Console) -> None:
     rows = [
         ("5'UTR", "utr5_accessibility",    "MFE kcal/mol; > −20 means accessible cap for translation"),
         ("Mfg",   "manufacturability",     "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
-        ("Stab",  "stability",             "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("Stab",  "stability",             "mRNA stability 0→1 (GC3 wobble, MFE/nt)"),
         ("TE",    "translation_efficiency", "RiboNN predicted translation efficiency; >= 1.5 ideal"),
         ("Score", None,                    "weighted sum of all metrics above"),
     ]
