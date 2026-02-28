@@ -8,6 +8,7 @@ _CDS = "AUGCCCAAGUAA"  # minimal valid CDS: AUG + codon + stop
 _UTR3 = "GAGTAGUCCC"
 _UTR5_MIN = 4
 _UTR5_MAX = 10
+_OFF_TARGET_CELL_TYPE = "Dendritic_cell"
 
 
 @pytest.fixture
@@ -20,6 +21,14 @@ def mock_get_cds(mocker):
     """Mock Ensembl CDS lookup so tests don't need network access."""
     mock = mocker.patch("chainofcustody.cli.get_canonical_cds")
     mock.return_value = _CDS.replace("U", "T")  # returns DNA like the real function
+    return mock
+
+
+@pytest.fixture
+def mock_generate_utr3(mocker):
+    """Mock three_prime 3'UTR generation so tests don't need the expression DB."""
+    mock = mocker.patch("chainofcustody.cli.generate_utr3")
+    mock.return_value = _UTR3
     return mock
 
 
@@ -70,7 +79,7 @@ def test_help(runner):
     assert "NSGA3" in result.output
 
 
-def test_summary_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+def test_summary_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
     result = runner.invoke(main, [
         "--gene", _GENE,
         "--utr5-min", str(_UTR5_MIN), "--utr5-max", str(_UTR5_MAX),
@@ -86,35 +95,35 @@ def test_summary_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
     }
 
 
-def test_json_output(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+def test_json_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
     result = runner.invoke(main, ["--gene", _GENE, "--output", "json"])
 
     assert result.exit_code == 0
     assert "fitness" in result.output
 
 
-def test_custom_mutation_rate(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+def test_custom_mutation_rate(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
     runner.invoke(main, ["--gene", _GENE, "--mutation-rate", "0.05"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["mutation_rate"] == 0.05
 
 
-def test_seed_is_passed(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+def test_seed_is_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
     runner.invoke(main, ["--gene", _GENE, "--seed", "42"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["seed"] == 42
 
 
-def test_workers_is_passed(runner, mock_get_cds, mock_optimize_run, mock_scoring):
+def test_workers_is_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
     runner.invoke(main, ["--gene", _GENE, "--workers", "4"])
 
     _, kwargs = mock_optimize_run.call_args
     assert kwargs["n_workers"] == 4
 
 
-def test_csv_output(runner, mock_get_cds, mock_optimize_run, mock_scoring, tmp_path):
+def test_csv_output(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring, tmp_path):
     csv_file = tmp_path / "history.csv"
     result = runner.invoke(main, ["--gene", _GENE, "--csv", str(csv_file)])
 
@@ -128,7 +137,7 @@ def test_csv_output(runner, mock_get_cds, mock_optimize_run, mock_scoring, tmp_p
     assert set(rows[0].keys()) >= {"generation", "sequence", "overall"}
 
 
-def test_gene_not_found(runner, mocker):
+def test_gene_not_found(runner, mocker, mock_generate_utr3):
     from chainofcustody.initial import GeneNotFoundError
     mocker.patch("chainofcustody.cli.get_canonical_cds", side_effect=GeneNotFoundError("BADGENE not found"))
     result = runner.invoke(main, ["--gene", "BADGENE"])
@@ -139,6 +148,26 @@ def test_gene_not_found(runner, mocker):
 
 def test_utr5_min_gt_max_rejected(runner, mock_get_cds):
     result = runner.invoke(main, ["--gene", _GENE, "--utr5-min", "50", "--utr5-max", "10"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_off_target_cell_type_is_passed(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "Hepatocyte_derived"])
+
+    mock_generate_utr3.assert_called_once_with("Hepatocyte_derived")
+
+
+def test_off_target_cell_type_default(runner, mock_get_cds, mock_generate_utr3, mock_optimize_run, mock_scoring):
+    runner.invoke(main, ["--gene", _GENE])
+
+    mock_generate_utr3.assert_called_once_with(_OFF_TARGET_CELL_TYPE)
+
+
+def test_off_target_cell_type_not_found(runner, mock_get_cds, mocker):
+    mocker.patch("chainofcustody.cli.generate_utr3", side_effect=ValueError("Unknown cell type 'BADTYPE'"))
+    result = runner.invoke(main, ["--gene", _GENE, "--off-target-cell-type", "BADTYPE"])
 
     assert result.exit_code == 1
     assert "Error" in result.output

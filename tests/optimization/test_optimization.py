@@ -9,12 +9,15 @@ from chainofcustody.optimization import (
     build_algorithm,
     run,
 )
+from chainofcustody.three_prime.generate_UTR3 import generate_mrna_sponge_utr
 
 N_METRICS = len(METRIC_NAMES)
 
 # Minimal fixed sequence parts used across tests.
 _CDS = "AUGCCCAAGUAA"   # AUG + 1 sense codon + stop (12 nt, divisible by 3)
-_UTR3 = "GAGTAGUCCC"
+# Derive the 3'UTR from the same pure function used at runtime, so tests
+# exercise the actual three_prime code without touching the expression DB.
+_UTR3 = generate_mrna_sponge_utr(["UAGCUUAUCAGACUGAUGUUGA"], num_sites=2)["full_utr"]
 _UTR5_MIN = 4
 _UTR5_MAX = 20
 

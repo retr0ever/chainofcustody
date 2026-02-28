@@ -9,14 +9,12 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from chainofcustody.evaluation.fitness import compute_fitness
 from chainofcustody.evaluation.report import print_batch_report, print_report, score_sequence
 from chainofcustody.initial import GeneNotFoundError, get_canonical_cds
-from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, UTR_SEED, run
+from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
+from chainofcustody.three_prime import generate_utr3
 
 console = Console()
 
 _CSV_COLUMNS = ["generation", "sequence", *METRIC_NAMES, "overall"]
-
-# Shared UTR sequence: used as the seed for 5'UTR evolution and as the fixed 3'UTR.
-_UTR3 = UTR_SEED
 
 
 def _write_csv(path: Path, history: list[dict]) -> None:
@@ -33,6 +31,7 @@ def _to_rna(seq: str) -> str:
 
 @click.command()
 @click.option("--gene", default="POU5F1", show_default=True, help="HGNC gene symbol whose canonical CDS to optimise (e.g. TP53).")
+@click.option("--off-target-cell-type", default="Dendritic_cell", show_default=True, help="Off-target cell type used to generate the 3'UTR sponge (must match a name in the expression database).")
 @click.option("--utr5-min", type=int, default=10, show_default=True, help="Minimum 5'UTR length the GA can produce.")
 @click.option("--utr5-max", type=int, default=100, show_default=True, help="Maximum 5'UTR length the GA can produce.")
 @click.option("--pop-size", type=int, default=128, show_default=True, help="Population size (must be ≥ number of reference directions; default covers Das-Dennis n_partitions=4 → 126 directions).")
@@ -42,7 +41,7 @@ def _to_rna(seq: str) -> str:
 @click.option("--workers", type=int, default=None, help="Parallel worker processes for fitness evaluation (default: all CPU cores). Pass 1 to disable parallelism.")
 @click.option("--output", "output_fmt", type=click.Choice(["summary", "json"]), default="summary", show_default=True, help="Output format.")
 @click.option("--csv", "csv_path", type=click.Path(dir_okay=False, writable=True, path_type=Path), default=None, help="Write Pareto-front results to a CSV file.")
-def main(gene: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
+def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mutation_rate: float, seed: int | None, workers: int | None, output_fmt: str, csv_path: Path | None) -> None:
     """Run NSGA3 to evolve an optimal 5'UTR for a given gene."""
     if utr5_min > utr5_max:
         console.print(f"[bold red]Error:[/bold red] --utr5-min ({utr5_min}) must be ≤ --utr5-max ({utr5_max}).")
@@ -55,9 +54,16 @@ def main(gene: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mut
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise SystemExit(1)
 
+    console.print(f"Generating 3'UTR sponge for off-target cell type [bold]{off_target_cell_type}[/bold]…")
+    try:
+        utr3 = generate_utr3(off_target_cell_type)
+    except (ValueError, RuntimeError) as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise SystemExit(1)
+
     console.print(
         f"CDS resolved: [bold]{len(cds)} nt[/bold]  "
-        f"3'UTR: [bold]{len(_UTR3)} nt[/bold]  "
+        f"3'UTR: [bold]{len(utr3)} nt[/bold]  "
         f"5'UTR length: [bold]{utr5_min}–{utr5_max} nt[/bold] (evolved)\n"
     )
     console.print(
@@ -80,13 +86,13 @@ def main(gene: str, utr5_min: int, utr5_max: int, pop_size: int, n_gen: int, mut
     ) as progress:
         task = progress.add_task("5'UTR", total=n_gen)
         X, F, history = run(
-            utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=_UTR3,
+            utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3,
             pop_size=pop_size, n_gen=n_gen,
             mutation_rate=mutation_rate, seed=seed, n_workers=workers,
             progress=progress, progress_task=task,
         )
 
-    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=_UTR3)
+    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
     sequences = problem.decode(X)
 
     results = []
