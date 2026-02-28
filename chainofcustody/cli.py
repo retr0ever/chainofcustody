@@ -7,10 +7,9 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 from chainofcustody.evaluation.fitness import compute_fitness
-from chainofcustody.evaluation.report import print_batch_report, print_report, score_sequence
+from chainofcustody.evaluation.report import print_batch_report, print_report
 from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
-from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
-from chainofcustody.optimization.problem import KOZAK, assemble_mrna
+from chainofcustody.optimization import KOZAK, METRIC_NAMES, mRNASequence, SequenceProblem, assemble_mrna, run, score_parsed
 from chainofcustody.three_prime import generate_utr3
 
 console = Console()
@@ -99,9 +98,10 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
     results = []
     for i, seq in enumerate(sequences):
         utr5_len = int(X[i][0])
-        utr5_end = utr5_len + len(KOZAK)
+        utr5 = seq[: utr5_len + len(KOZAK)]
+        parsed = mRNASequence(utr5=utr5, cds=cds, utr3=utr3)
         try:
-            report = score_sequence(seq, utr5_end=utr5_end, cds_end=utr5_end + len(cds))
+            report = score_parsed(parsed)
             fitness = compute_fitness(report)
             results.append({"label": f"pareto_{i + 1}", "sequence": seq, "report": report, "fitness": fitness})
         except Exception:

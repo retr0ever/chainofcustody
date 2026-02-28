@@ -7,9 +7,9 @@ mRNA sequence design and evaluation pipeline for the Serova x Berlin Biohack cha
 ```
 chainofcustody/
   cli.py              # Single CLI entry point (chainofcustody command, optimize only)
+  sequence.py         # mRNASequence dataclass + KOZAK constant
   cds/                # Gene fetching from Ensembl (get_canonical_cds)
   evaluation/          # 6-metric scoring pipeline
-    parser.py          # Sequence parsing: FASTA loading, T->U normalisation, CDS boundary detection
     codons.py          # Metric 1: CAI, GC content, rare codon clusters, liver/target selectivity
     mirna.py           # Metric 3: miR-122 seed site scanning + accidental match warnings
     structure.py       # Metric 4: ViennaRNA folding (5'UTR accessibility, global MFE)
@@ -34,13 +34,13 @@ tests/                 # pytest suite (skip integration tests by default)
 
 ### RNA throughout
 
-All internal sequence handling uses **RNA nucleotides (A/U/G/C)**, not DNA. The only T->U conversion point is `parser.py:clean_sequence()`, which normalises any input (DNA or RNA) to RNA on entry. Everything downstream operates in RNA.
+All internal sequence handling uses **RNA nucleotides (A/U/G/C)**, not DNA. Callers must normalise DNA to RNA (replace T→U) before constructing an `mRNASequence`. Everything downstream operates in RNA.
 
 - Start codon: `AUG` (not ATG)
 - Stop codons: `UAA`, `UAG`, `UGA`
 - ViennaRNA receives RNA directly (no conversion needed)
 - The optimizer encodes nucleotides as integers: 0=A, 1=C, 2=G, 3=U
-- The Ensembl API and FASTA files return DNA — `clean_sequence()` handles conversion
+- The Ensembl API and FASTA files return DNA — convert at the call site
 
 Do **not** add T->U or U->T conversion hacks in individual modules. If something needs DNA, convert at the boundary, not inside the pipeline.
 
@@ -72,7 +72,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Running tests:** All tests must pass before pushing. Run `uv run pytest` from the repo root.
 
 **Mocking rules:**
-- Mock `score_sequence` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
+- Mock `score_parsed` (not `compute_fitness`) in CLI tests — `compute_fitness` is pure arithmetic and should run on mock report data to catch display/formatting bugs.
 - Patch imports at their **usage** location (e.g. `chainofcustody.cli.run`, not `chainofcustody.optimization.run`) since the CLI uses top-level imports.
 - The mock report dict must include all 6 top-level keys: `sequence_info`, `codon_scores`, `mirna_scores`, `structure_scores`, `manufacturing_scores`, `stability_scores`, and `summary`. Missing keys will cause KeyError in `compute_fitness` or `print_report`.
 
@@ -84,31 +84,29 @@ uv run pytest -x -v         # stop on first failure, verbose
 
 **Writing new tests:**
 - Evaluation metric tests need ViennaRNA installed (structure.py, stability.py). Mock `RNA.fold` if testing without it.
-- Sequences in tests should use RNA (`AUG`, not `ATG`) unless testing the T->U conversion in `clean_sequence` itself.
+- Sequences in tests should use RNA (`AUG`, not `ATG`).
 - The optimizer uses `N_OBJECTIVES = len(METRIC_NAMES)` (currently 6). Never hardcode objective counts — import `N_OBJECTIVES` or `METRIC_NAMES` from `optimization.problem`.
 - Use `pytest-mock`'s `mocker` fixture for patching (already a dev dependency).
 
 ## Python API
 
 ```python
-from chainofcustody.evaluation import score_sequence, compute_fitness, evaluate_candidate, evaluate_batch
+from chainofcustody.optimization import mRNASequence, score_parsed, assemble_mrna
+from chainofcustody.evaluation import compute_fitness
 
-# Score a single sequence (accepts DNA or RNA)
-report = score_sequence("AUGCCCAAAGGG...")
+# Assemble and score a sequence (Kozak is inserted automatically by assemble_mrna)
+full_seq = assemble_mrna(utr5="AAAAAAA", cds="AUGCCCAAAUGGG...", utr3="CCCGGG")
+
+# Construct an mRNASequence and score it
+seq = mRNASequence(raw=full_seq, utr5="AAAAAAA", cds="AUGCCCAAAUGGG...", utr3="CCCGGG")
+report = score_parsed(seq)
 fitness = compute_fitness(report)
-
-# Or use the convenience wrapper
-result = evaluate_candidate("AUGCCCAAAGGG...", label="my_seq")
-
-# Batch scoring with ranking
-results = evaluate_batch(["seq1", "seq2", "seq3"])
 ```
 
 ## Incomplete modules
 
 - `five_prime/` — deleted placeholder, no 5'UTR generator yet
-- `optimization/operators.py` — random nucleotide mutation, does **not** preserve protein sequence (unlike `evaluation/mutations.py` which does)
-- No concatenation step (5'UTR + CDS + 3'UTR assembly)
+- `optimization/operators.py` — random nucleotide mutation, does **not** preserve protein sequence
 
 ## Dependencies requiring system install
 

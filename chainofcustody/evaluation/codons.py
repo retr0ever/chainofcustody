@@ -5,7 +5,7 @@ from collections import Counter
 
 from python_codon_tables import get_codons_table
 
-from .parser import ParsedSequence
+from chainofcustody.sequence import mRNASequence
 from .data import get_liver_codon_weights, get_codon_weights
 
 # Human codon usage table (NCBI Taxonomy ID 9606)
@@ -38,7 +38,7 @@ def _relative_adaptiveness(codon_table: dict) -> dict[str, float]:
     return w
 
 
-def compute_cai(parsed: ParsedSequence) -> float:
+def compute_cai(parsed: mRNASequence) -> float:
     """
     Codon Adaptation Index (Sharp & Li, 1987).
     Returns value between 0 and 1. Higher = better adapted to human codon usage.
@@ -55,7 +55,7 @@ def compute_cai(parsed: ParsedSequence) -> float:
     return math.exp(log_sum / len(scoring_codons))
 
 
-def compute_gc_content(parsed: ParsedSequence) -> dict[str, float]:
+def compute_gc_content(parsed: mRNASequence) -> dict[str, float]:
     """Compute GC content for full sequence and CDS separately."""
     def gc_pct(seq: str) -> float:
         if not seq:
@@ -64,14 +64,14 @@ def compute_gc_content(parsed: ParsedSequence) -> dict[str, float]:
         return gc / len(seq) * 100
 
     return {
-        "overall": round(gc_pct(parsed.raw), 1),
+            "overall": round(gc_pct(str(parsed)), 1),
         "cds": round(gc_pct(parsed.cds), 1),
         "utr5": round(gc_pct(parsed.utr5), 1) if parsed.utr5 else None,
         "utr3": round(gc_pct(parsed.utr3), 1) if parsed.utr3 else None,
     }
 
 
-def compute_rare_codon_clusters(parsed: ParsedSequence, window: int = 18, threshold: float = 0.1) -> list[dict]:
+def compute_rare_codon_clusters(parsed: mRNASequence, window: int = 18, threshold: float = 0.1) -> list[dict]:
     """
     Find clusters of rare codons (%MinMax-style).
     Returns positions where a window of codons has unusually low average relative adaptiveness.
@@ -94,7 +94,7 @@ def compute_rare_codon_clusters(parsed: ParsedSequence, window: int = 18, thresh
     return clusters
 
 
-def compute_liver_selectivity(parsed: ParsedSequence) -> float:
+def compute_liver_selectivity(parsed: mRNASequence) -> float:
     """
     Score how well the sequence's codon choices correlate with liver cell TE.
 
@@ -110,7 +110,7 @@ def compute_liver_selectivity(parsed: ParsedSequence) -> float:
     return sum(scores) / len(scores)
 
 
-def compute_target_selectivity(parsed: ParsedSequence, target_cell_type: str) -> float:
+def compute_target_selectivity(parsed: mRNASequence, target_cell_type: str) -> float:
     """
     Score how well the sequence's codon choices correlate with the target cell type's TE.
     Same logic as liver selectivity but for an arbitrary cell type column.
@@ -123,7 +123,7 @@ def compute_target_selectivity(parsed: ParsedSequence, target_cell_type: str) ->
     return sum(scores) / len(scores)
 
 
-def score_codons(parsed: ParsedSequence, target_cell_type: str | None = None) -> dict:
+def score_codons(parsed: mRNASequence, target_cell_type: str | None = None) -> dict:
     """Run all codon-related scoring. Returns a dict of results."""
     result = {
         "cai": round(compute_cai(parsed), 4),

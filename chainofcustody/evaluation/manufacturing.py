@@ -2,7 +2,7 @@
 
 import re
 
-from .parser import ParsedSequence
+from chainofcustody.sequence import mRNASequence
 
 # Common restriction enzyme recognition sites to avoid
 RESTRICTION_SITES = {
@@ -107,9 +107,9 @@ def check_restriction_sites(seq: str, sites: dict[str, str] | None = None) -> di
     }
 
 
-def score_manufacturing(parsed: ParsedSequence) -> dict:
+def score_manufacturing(parsed: mRNASequence) -> dict:
     """Run all manufacturability checks."""
-    seq = parsed.raw
+    seq = str(parsed)
 
     gc = check_gc_windows(seq)
     homopolymers = check_homopolymers(seq)

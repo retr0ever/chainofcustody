@@ -4,14 +4,14 @@ import re
 
 import RNA
 
-from .parser import ParsedSequence
+from chainofcustody.sequence import mRNASequence
 
 
 # AU-rich element motif (AUUUA pentamer)
 ARE_PATTERN = re.compile(r"AUUUA")
 
 
-def compute_gc3(parsed: ParsedSequence) -> float:
+def compute_gc3(parsed: mRNASequence) -> float:
     """
     GC content at the 3rd codon position (wobble position).
     Higher GC3 correlates with greater mRNA stability in mammals.
@@ -23,12 +23,12 @@ def compute_gc3(parsed: ParsedSequence) -> float:
     return gc3_count / len(codons)
 
 
-def compute_mfe_per_nt(parsed: ParsedSequence, max_length: int = 2000) -> float:
+def compute_mfe_per_nt(parsed: mRNASequence, max_length: int = 2000) -> float:
     """
     Minimum free energy per nucleotide. More negative = more stable.
     For long sequences, uses windowed folding.
     """
-    seq = parsed.raw
+    seq = str(parsed)
 
     if len(seq) <= max_length:
         _, mfe = RNA.fold(seq)
@@ -48,7 +48,7 @@ def compute_mfe_per_nt(parsed: ParsedSequence, max_length: int = 2000) -> float:
     return avg_mfe / window_size
 
 
-def count_au_rich_elements(parsed: ParsedSequence) -> int:
+def count_au_rich_elements(parsed: mRNASequence) -> int:
     """
     Count AU-rich elements (AREs) in the 3'UTR.
     AREs (AUUUA pentamer) destabilise mRNA by recruiting exosome degradation.
@@ -59,7 +59,7 @@ def count_au_rich_elements(parsed: ParsedSequence) -> int:
     return len(ARE_PATTERN.findall(parsed.utr3))
 
 
-def score_stability(parsed: ParsedSequence) -> dict:
+def score_stability(parsed: mRNASequence) -> dict:
     """
     Compute mRNA stability metrics.
 

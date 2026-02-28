@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 
-from .parser import ParsedSequence
+from chainofcustody.sequence import mRNASequence
 
 # miRNA library: name -> mature sequence (RNA, 5'->3')
 MIRNA_LIBRARY = {
@@ -48,7 +48,7 @@ def _get_full_target(mirna_rna: str) -> str:
     return _reverse_complement(mirna_rna)
 
 
-def _classify_region(pos: int, parsed: ParsedSequence) -> str:
+def _classify_region(pos: int, parsed: mRNASequence) -> str:
     """Classify a position as 5'UTR, CDS, or 3'UTR."""
     if pos < parsed.cds_start:
         return "5utr"
@@ -59,13 +59,13 @@ def _classify_region(pos: int, parsed: ParsedSequence) -> str:
 
 
 def scan_for_mirna(
-    parsed: ParsedSequence,
+    parsed: mRNASequence,
     mirna_name: str,
     mirna_seq: str,
 ) -> list[MirnaSiteHit]:
     """Scan sequence for target sites of a specific miRNA."""
     hits = []
-    seq = parsed.raw
+    seq = str(parsed)
 
     # Full complementary match (most potent — triggers RISC cleavage)
     full_target = _get_full_target(mirna_seq)
@@ -106,7 +106,7 @@ def compute_site_spacing(hits: list[MirnaSiteHit]) -> list[int]:
     return [positions[i+1] - positions[i] for i in range(len(positions) - 1)]
 
 
-def score_mirna(parsed: ParsedSequence) -> dict:
+def score_mirna(parsed: mRNASequence) -> dict:
     """
     Run miRNA target site scanning.
 

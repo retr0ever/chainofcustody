@@ -2,7 +2,8 @@ import logging
 import numpy as np
 from pymoo.core.problem import ElementwiseProblem
 
-from chainofcustody.evaluation.report import score_sequence
+from chainofcustody.sequence import KOZAK, mRNASequence
+from chainofcustody.evaluation.scoring import score_parsed
 from chainofcustody.evaluation.fitness import compute_fitness
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,6 @@ METRIC_NAMES = [
     "stability",
 ]
 N_OBJECTIVES = len(METRIC_NAMES)
-
-# Kozak consensus sequence inserted between the 5'UTR and the CDS start codon.
-KOZAK = "GCCACC"
 
 
 def assemble_mrna(utr5: str, cds: str, utr3: str) -> str:
@@ -91,18 +89,17 @@ class SequenceProblem(ElementwiseProblem):
         """Evaluate a single solution vector ``x``."""
         utr5_len = int(x[0])
         utr5 = "".join(NUCLEOTIDES[x[1:utr5_len + 1]])
-        full_seq = assemble_mrna(utr5, self.cds, self.utr3)
-        utr5_end = utr5_len + len(KOZAK)
+        parsed = mRNASequence(
+            utr5=utr5 + KOZAK,
+            cds=self.cds,
+            utr3=self.utr3,
+        )
         try:
-            report = score_sequence(
-                full_seq,
-                utr5_end=utr5_end,
-                cds_end=utr5_end + len(self.cds),
-            )
+            report = score_parsed(parsed)
             fitness = compute_fitness(report)
             out["F"] = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
         except Exception as exc:
-            logger.warning("Scoring failed for sequence %r…: %s", full_seq[:30], exc)
+            logger.warning("Scoring failed for sequence %r…: %s", str(parsed)[:30], exc)
             out["F"] = np.ones(N_OBJECTIVES)
 
     def decode(self, X: np.ndarray) -> list[str]:

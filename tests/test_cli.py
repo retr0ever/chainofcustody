@@ -68,7 +68,7 @@ def mock_scoring(mocker):
         "overall": 0.8,
         "suggestions": [],
     }
-    mocker.patch("chainofcustody.cli.score_sequence", return_value=mock_report)
+    mocker.patch("chainofcustody.cli.score_parsed", return_value=mock_report)
     mocker.patch("chainofcustody.cli.compute_fitness", return_value=mock_fitness)
 
 

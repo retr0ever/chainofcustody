@@ -11,7 +11,8 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 from chainofcustody.evaluation.fitness import DEFAULT_WEIGHTS
 from chainofcustody.optimization.operators import NucleotideMutation, NucleotideSampling
-from chainofcustody.optimization.problem import KOZAK, METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem, assemble_mrna
+from chainofcustody.sequence import KOZAK
+from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem, assemble_mrna
 
 _DEFAULT_WORKERS = os.cpu_count() or 1
 

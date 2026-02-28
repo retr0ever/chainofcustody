@@ -2,7 +2,7 @@
 
 import RNA
 
-from .parser import ParsedSequence
+from chainofcustody.sequence import mRNASequence
 
 
 def fold_sequence(seq: str) -> tuple[str, float]:
@@ -11,7 +11,7 @@ def fold_sequence(seq: str) -> tuple[str, float]:
     return structure, mfe
 
 
-def check_utr5_accessibility(parsed: ParsedSequence) -> dict:
+def check_utr5_accessibility(parsed: mRNASequence) -> dict:
     """
     Check if the 5'UTR is accessible for ribosome loading.
     Strong secondary structure in the 5'UTR blocks the 43S pre-initiation complex.
@@ -43,7 +43,7 @@ def check_utr5_accessibility(parsed: ParsedSequence) -> dict:
 
 
 def check_mirna_site_accessibility(
-    parsed: ParsedSequence,
+    parsed: mRNASequence,
     site_positions: list[int],
     site_length: int = 22,
     flank: int = 30,
@@ -57,7 +57,7 @@ def check_mirna_site_accessibility(
         flank: How many nt of context to include on each side for folding.
     """
     results = []
-    seq = parsed.raw
+    seq = str(parsed)
 
     for pos in site_positions:
         # Extract local window around the site
@@ -87,11 +87,11 @@ def check_mirna_site_accessibility(
     return results
 
 
-def compute_global_mfe(parsed: ParsedSequence, max_length: int = 2000) -> dict:
+def compute_global_mfe(parsed: mRNASequence, max_length: int = 2000) -> dict:
     """
     Compute global MFE. For long sequences, fold in windows to avoid O(n^3) blowup.
     """
-    seq = parsed.raw
+    seq = str(parsed)
 
     if len(seq) <= max_length:
         structure, mfe = fold_sequence(seq)
@@ -124,7 +124,7 @@ def compute_global_mfe(parsed: ParsedSequence, max_length: int = 2000) -> dict:
     }
 
 
-def score_structure(parsed: ParsedSequence, mirna_site_positions: list[int] | None = None) -> dict:
+def score_structure(parsed: mRNASequence, mirna_site_positions: list[int] | None = None) -> dict:
     """Run all structure-related scoring."""
     result = {
         "utr5_accessibility": check_utr5_accessibility(parsed),
