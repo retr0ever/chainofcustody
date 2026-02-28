@@ -170,7 +170,7 @@ def _plot_1d(
         leg.get_frame().set_alpha(0.85)
 
     ax.set_title(
-        f"mRNA Sponge 3\u2032UTR  |  {total_len} nt  |  {site_counter} binding sites",
+        f"3\u2032UTR Cassette  |  {total_len} nt  |  {site_counter} binding sites",
         fontsize=14, pad=20, color="white",
     )
     plt.tight_layout()
@@ -218,7 +218,7 @@ def _plot_2d(
         files = _plot_structure_naview(
             seq=seq,
             structure=structure,
-            title=f"mRNA Sponge 3\u2032UTR Fold  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
+            title=f"3\u2032UTR Secondary Structure  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
             out_prefix="structure_2d",
             out_dir=Path(tmpdir),
             color_func=color_func,
@@ -294,7 +294,7 @@ def _plot_2d(
         leg.get_frame().set_alpha(0.85)
 
     ax.set_title(
-        f"mRNA Sponge 3\u2032UTR Fold  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
+        f"3\u2032UTR Secondary Structure  |  MFE = {mfe:.2f} kcal/mol  |  {n} nt",
         fontsize=13, color="white", pad=12,
     )
     plt.tight_layout()
