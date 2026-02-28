@@ -1,16 +1,17 @@
-"""Orchestrate the full 3-metric scoring pipeline over a parsed mRNA sequence."""
+"""Orchestrate the full 4-metric scoring pipeline over a parsed mRNA sequence."""
 
 from chainofcustody.sequence import mRNASequence
 from chainofcustody.evaluation.structure import score_structure
 from chainofcustody.evaluation.manufacturing import score_manufacturing
 from chainofcustody.evaluation.stability import score_stability
+from chainofcustody.evaluation.ribonn import score_ribonn
 
 
 def score_parsed(
     parsed: mRNASequence,
     target: str | None = None,
 ) -> dict:
-    """Run all 3 evaluation metrics on an already-parsed mRNA sequence.
+    """Run all 4 evaluation metrics on an already-parsed mRNA sequence.
 
     Args:
         parsed: An ``mRNASequence`` whose regions are correctly delimited.
@@ -18,11 +19,13 @@ def score_parsed(
 
     Returns:
         Full report dict with keys: ``sequence_info``, ``structure_scores``,
-        ``manufacturing_scores``, ``stability_scores``, ``summary``.
+        ``manufacturing_scores``, ``stability_scores``, ``ribonn_scores``,
+        ``summary``.
     """
     structure_scores = score_structure(parsed)
     manufacturing_scores = score_manufacturing(parsed)
     stability_scores = score_stability(parsed)
+    ribonn_scores = score_ribonn(parsed)
 
     mfg_violations = manufacturing_scores.get("total_violations", 0)
 
@@ -30,6 +33,7 @@ def score_parsed(
         "utr5_accessibility": structure_scores.get("utr5_accessibility", {}).get("status", "GREY"),
         "manufacturability": _traffic_light(-mfg_violations, (-3, 0), (-999, 0)),
         "stability": stability_scores.get("status", "GREY"),
+        "translation_efficiency": ribonn_scores.get("status", "GREY"),
     }
 
     return {
@@ -43,6 +47,7 @@ def score_parsed(
         "structure_scores": structure_scores,
         "manufacturing_scores": manufacturing_scores,
         "stability_scores": stability_scores,
+        "ribonn_scores": ribonn_scores,
         "summary": summary,
     }
 

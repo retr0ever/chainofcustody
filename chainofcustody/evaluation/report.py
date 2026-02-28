@@ -71,6 +71,16 @@ def format_report(report: dict) -> str:
         lines.append(f"- **MFE per nt:** {stab.get('mfe_per_nt', 0):.4f} kcal/mol/nt")
         lines.append(f"- **AU-rich elements:** {stab.get('au_rich_elements', 0)} in 3'UTR")
         lines.append(f"- **Stability score:** {stab.get('stability_score', 0):.2f}")
+    lines.append("")
+
+    # RiboNN details
+    ribonn = report.get("ribonn_scores", {})
+    lines.append("## 4. Translation Efficiency")
+    if ribonn.get("available"):
+        lines.append(f"- **Mean TE:** {ribonn.get('mean_te', 0):.4f}")
+        lines.append(f"- **Status:** {ribonn.get('status', 'GREY')}")
+    else:
+        lines.append(f"- **Status:** unavailable ({ribonn.get('message', 'RiboNN not installed')})")
 
     return "\n".join(lines)
 
@@ -98,6 +108,7 @@ def _metric_label(metric: str) -> str:
         "utr5_accessibility": "5'UTR accessibility",
         "manufacturability": "Manufacturability",
         "stability": "Stability",
+        "translation_efficiency": "Translation eff.",
     }
     return labels.get(metric, metric)
 
@@ -118,6 +129,11 @@ def _metric_hint(metric: str, report: dict) -> str:
     if metric == "stability":
         stab = report.get("stability_scores", {})
         return f"GC3 {stab.get('gc3', 0):.0%}, {stab.get('au_rich_elements', 0)} AREs"
+    if metric == "translation_efficiency":
+        ribonn = report.get("ribonn_scores", {})
+        if not ribonn.get("available", False):
+            return "RiboNN unavailable"
+        return f"mean TE {ribonn.get('mean_te', 0):.2f}"
     return ""
 
 
@@ -212,6 +228,18 @@ def print_report(console: Console, report: dict, label: str | None = None) -> No
         console.print(f"  Combined score  {stab.get('stability_score', 0):.2f}", style="dim")
         console.print()
 
+    # Translation efficiency detail
+    ribonn = report.get("ribonn_scores", {})
+    if summary.get("translation_efficiency") != "GREEN" and ribonn:
+        has_details = True
+        console.print(Rule("Translation Efficiency", style="dim"))
+        if ribonn.get("available"):
+            console.print(f"  Mean TE  {ribonn.get('mean_te', 0):.4f}", style="bold")
+            console.print(f"  {ribonn.get('message', '')}", style="dim")
+        else:
+            console.print(f"  {ribonn.get('message', 'RiboNN not available')}", style="dim")
+        console.print()
+
     # ── Suggestions
     if fitness["suggestions"]:
         console.print(Rule("What to improve", style="dim"))
@@ -245,6 +273,7 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
     table.add_column("5'UTR", justify="center")
     table.add_column("Mfg", justify="right")
     table.add_column("Stab", justify="right")
+    table.add_column("TE", justify="right")
     table.add_column("Overall", justify="right", style="bold")
 
     for i, r in enumerate(results, 1):
@@ -267,6 +296,7 @@ def print_batch_report(console: Console, results: list[dict]) -> None:
             utr5_text,
             _score_cell(scores["manufacturability"]["value"], summary["manufacturability"]),
             _score_cell(scores["stability"]["value"], summary.get("stability", "GREY")),
+            _score_cell(scores["translation_efficiency"]["value"], summary.get("translation_efficiency", "GREY")),
             Text(f"{overall:.2f}", style=overall_style),
         )
 
@@ -285,6 +315,7 @@ def _print_score_legend(console: Console) -> None:
         ("5'UTR", "utr5_accessibility", "MFE kcal/mol; > −20 means accessible cap for translation"),
         ("Mfg",   "manufacturability",  "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
         ("Stab",  "stability",          "mRNA stability 0→1 (GC3 wobble, AU-rich elements, MFE/nt)"),
+        ("TE",    "translation_efficiency", "RiboNN predicted translation efficiency; >= 1.5 ideal"),
         ("Score", None,                 "weighted sum of all metrics above"),
     ]
 

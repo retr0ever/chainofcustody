@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 NUCLEOTIDES = np.array(["A", "C", "G", "U"])
 N_NUCLEOTIDES = len(NUCLEOTIDES)
 
-# One objective per fitness metric + overall
+# One objective per fitness metric
 METRIC_NAMES = [
     "utr5_accessibility",
     "manufacturability",
     "stability",
+    "translation_efficiency",
 ]
 N_OBJECTIVES = len(METRIC_NAMES)
 

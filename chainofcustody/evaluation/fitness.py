@@ -1,9 +1,10 @@
 """Normalised fitness scoring and suggestion engine for candidate ranking."""
 
 DEFAULT_WEIGHTS = {
-    "utr5_accessibility": 0.25,
-    "manufacturability": 0.35,
-    "stability": 0.40,
+    "utr5_accessibility": 0.22,
+    "manufacturability": 0.30,
+    "stability": 0.35,
+    "translation_efficiency": 0.13,
 }
 
 
@@ -30,10 +31,23 @@ def _normalise_stability(report: dict) -> float:
     return report.get("stability_scores", {}).get("stability_score", 0.5)
 
 
+def _normalise_te(report: dict) -> float:
+    """1.0 if mean TE >= 2.0, linear to 0 at 0.5; None → 0.5 (neutral)."""
+    mean_te = report.get("ribonn_scores", {}).get("mean_te")
+    if mean_te is None:
+        return 0.5  # no data — neutral
+    if mean_te >= 2.0:
+        return 1.0
+    elif mean_te <= 0.5:
+        return 0.0
+    return (mean_te - 0.5) / 1.5
+
+
 NORMALISERS = {
     "utr5_accessibility": _normalise_utr5,
     "manufacturability": _normalise_manufacturing,
     "stability": _normalise_stability,
+    "translation_efficiency": _normalise_te,
 }
 
 
@@ -128,5 +142,12 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
         if stab.get("mfe_per_nt", 0) > -0.3:
             parts.append("increase thermodynamic stability")
         return "Improve stability: " + ", ".join(parts) if parts else "Improve overall mRNA stability"
+
+    if metric == "translation_efficiency":
+        ribonn = report.get("ribonn_scores", {})
+        if not ribonn.get("available", False):
+            return "Install RiboNN (set RIBONN_DIR) for translation efficiency predictions"
+        mean_te = ribonn.get("mean_te", 0)
+        return f"Optimise 5'UTR and codon usage for higher translation efficiency (current mean TE: {mean_te:.2f}, target: >= 1.5)"
 
     return None
