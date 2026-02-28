@@ -13,8 +13,10 @@ Repo: https://github.com/Sanofi-Public/RiboNN
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -73,7 +75,14 @@ def _score_with_dir(parsed: mRNASequence, ribonn_dir: Path) -> dict:
 
         # contextlib.chdir is required: model weight paths in predict.py are
         # relative strings (e.g. "models/human/{run_id}/state_dict.pth").
-        with contextlib.chdir(ribonn_dir):
+        with contextlib.chdir(ribonn_dir), \
+             contextlib.redirect_stdout(open(os.devnull, "w")), \
+             warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="'pin_memory' argument is set as true but not supported on MPS",
+                category=UserWarning,
+            )
             predictions = predict_using_nested_cross_validation_models(
                 input_path,
                 _SPECIES,

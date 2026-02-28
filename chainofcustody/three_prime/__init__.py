@@ -47,11 +47,12 @@ def generate_utr3(
         If no miRNAs pass the expression ``threshold`` for the given
         off-target cell type.
     """
-    mature_seqs, df_mirna_expr, df_grouped = load_data()
+    mature_seqs, seed_seqs, df_mirna_expr, df_grouped = load_data()
 
     mirnas = mirnas_for_off_target_cell_type(
         off_target_cell_type=off_target_cell_type,
         mature_seqs=mature_seqs,
+        seed_seqs=seed_seqs,
         df_mirna_expr=df_mirna_expr,
         df_grouped=df_grouped,
         threshold=threshold,
