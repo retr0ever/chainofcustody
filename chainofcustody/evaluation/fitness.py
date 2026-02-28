@@ -9,15 +9,15 @@ DEFAULT_WEIGHTS = {
 
 
 def _normalise_utr5(report: dict) -> float:
-    """1.0 if MFE < -30, linear to 0 at 0."""
+    """1.0 if MFE >= -20, linear to 0 at -30, 0.0 below -30."""
     mfe = report["structure_scores"].get("utr5_accessibility", {}).get("mfe")
     if mfe is None:
         return 0.5  # no data — neutral
-    if mfe < -30:
+    if mfe >= -20:
         return 1.0
-    elif mfe > 0:
+    elif mfe <= -30:
         return 0.0
-    return -mfe / 30
+    return (mfe + 30) / 10
 
 
 def _normalise_manufacturing(report: dict) -> float:
@@ -111,7 +111,7 @@ def _suggestion_for(metric: str, report: dict) -> str | None:
     if metric == "utr5_accessibility":
         mfe = report["structure_scores"]["utr5_accessibility"].get("mfe")
         if mfe is not None:
-            return f"Reduce 5'UTR secondary structure (current MFE: {mfe:.1f}, target: > -20 kcal/mol)"
+            return f"Reduce 5'UTR secondary structure (current MFE: {mfe:.1f}, target: >= -20 kcal/mol)"
         return None
 
     if metric == "manufacturability":

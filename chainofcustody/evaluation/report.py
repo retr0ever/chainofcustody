@@ -103,7 +103,7 @@ def _metric_value(metric: str, report: dict, fitness: dict) -> str:
 
 def _metric_hint(metric: str, report: dict) -> str:
     if metric == "utr5_accessibility":
-        return "< -30 for green"
+        return ">= -20 for green, < -30 is red"
     if metric == "manufacturability":
         v = report["manufacturing_scores"]["total_violations"]
         return f"{v} violation{'s' if v != 1 else ''}"
@@ -265,7 +265,7 @@ def _print_score_legend(console: Console) -> None:
     legend.add_column("Target / Interpretation", style="dim")
 
     rows = [
-        ("5'UTR", "utr5_accessibility",    "MFE kcal/mol; > −20 means accessible cap for translation"),
+        ("5'UTR", "utr5_accessibility",    "MFE kcal/mol; >= −20 accessible (green), < −30 over-structured (red)"),
         ("Mfg",   "manufacturability",     "synthesis violations (GC windows, homopolymers, restriction sites); 0 ideal"),
         ("Stab",  "stability",             "mRNA stability 0→1 (GC3 wobble, MFE/nt)"),
         ("TE",    "translation_efficiency", "RiboNN predicted translation efficiency; >= 1.5 ideal"),
