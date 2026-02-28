@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from chainofcustody.optimization import (
+    KOZAK,
     METRIC_NAMES,
     NucleotideMutation,
     NucleotideSampling,
@@ -61,7 +62,7 @@ def test_problem_decode():
     # x[0]=4 (length), x[1:5]=[0,1,2,3] → ACGU
     X = np.array([[4, 0, 1, 2, 3]])
     decoded = problem.decode(X)
-    assert decoded == ["ACGU" + _CDS + _UTR3]
+    assert decoded == ["ACGU" + KOZAK + _CDS + _UTR3]
 
 
 def test_problem_decode_uses_length():
@@ -70,7 +71,7 @@ def test_problem_decode_uses_length():
     # length=2, active=[A,C], padding=[G,U,A,C] (ignored)
     X = np.array([[2, 0, 1, 2, 3, 0, 1]])
     decoded = problem.decode(X)
-    assert decoded == ["AC" + _CDS + _UTR3]
+    assert decoded == ["AC" + KOZAK + _CDS + _UTR3]
 
 
 # ── Sampling ─────────────────────────────────────────────────────────────────
@@ -131,5 +132,5 @@ def test_run_returns_pareto_front():
     assert {"generation", "sequence", "overall"} <= history[0].keys()
     # History sequences are full assembled sequences (length varies per individual)
     seq = history[0]["sequence"]
-    assert len(seq) >= 4 + len(_CDS) + len(_UTR3)
-    assert len(seq) <= 20 + len(_CDS) + len(_UTR3)
+    assert len(seq) >= 4 + len(KOZAK) + len(_CDS) + len(_UTR3)
+    assert len(seq) <= 20 + len(KOZAK) + len(_CDS) + len(_UTR3)

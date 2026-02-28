@@ -11,7 +11,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 from chainofcustody.evaluation.fitness import DEFAULT_WEIGHTS
 from chainofcustody.optimization.operators import NucleotideMutation, NucleotideSampling
-from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem
+from chainofcustody.optimization.problem import KOZAK, METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem, assemble_mrna
 
 _DEFAULT_WORKERS = os.cpu_count() or 1
 
@@ -64,7 +64,7 @@ def _build_history(result, cds: str, utr3: str) -> list[dict]:
         for x_row, f_row in zip(X, F):
             utr5_len = int(x_row[0])
             utr5 = "".join(NUCLEOTIDES[x_row[1:utr5_len + 1]])
-            seq = utr5 + cds + utr3
+            seq = assemble_mrna(utr5, cds, utr3)
             scores = {m: round(1.0 - float(f_val), 4) for m, f_val in zip(METRIC_NAMES, f_row)}
             overall = round(sum(scores[m] * DEFAULT_WEIGHTS.get(m, 0) for m in METRIC_NAMES), 4)
             records.append({"generation": gen, "sequence": seq, **scores, "overall": overall})

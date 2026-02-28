@@ -22,6 +22,25 @@ METRIC_NAMES = [
 ]
 N_OBJECTIVES = len(METRIC_NAMES)
 
+# Kozak consensus sequence inserted between the 5'UTR and the CDS start codon.
+KOZAK = "GCCACC"
+
+
+def assemble_mrna(utr5: str, cds: str, utr3: str) -> str:
+    """Assemble a full mRNA sequence from its three regions.
+
+    Inserts the Kozak consensus (``GCCACC``) between the 5'UTR and CDS.
+
+    Args:
+        utr5: 5'UTR sequence (RNA, variable length).
+        cds:  Coding sequence (RNA, start codon through stop codon).
+        utr3: 3'UTR sequence (RNA).
+
+    Returns:
+        Full mRNA: ``5'UTR + KOZAK + CDS + 3'UTR``.
+    """
+    return utr5 + KOZAK + cds + utr3
+
 
 class SequenceProblem(ElementwiseProblem):
     """Multi-objective sequence optimisation problem.
@@ -29,7 +48,10 @@ class SequenceProblem(ElementwiseProblem):
     Only the 5'UTR is evolved; its length is also a decision variable. The CDS
     and 3'UTR are fixed at construction time. The full evaluated sequence is:
 
-        5'UTR (evolved, variable length)  +  CDS (fixed)  +  3'UTR (fixed)
+        5'UTR (evolved, variable length)  +  KOZAK  +  CDS (fixed)  +  3'UTR (fixed)
+
+    The Kozak consensus (``GCCACC``) is always inserted between the evolved
+    5'UTR and the CDS start codon. It is not part of the evolved chromosome.
 
     Chromosome layout (n_var = utr5_max + 1):
         x[0]          — 5'UTR length  ∈ [utr5_min, utr5_max]
@@ -69,12 +91,13 @@ class SequenceProblem(ElementwiseProblem):
         """Evaluate a single solution vector ``x``."""
         utr5_len = int(x[0])
         utr5 = "".join(NUCLEOTIDES[x[1:utr5_len + 1]])
-        full_seq = utr5 + self.cds + self.utr3
+        full_seq = assemble_mrna(utr5, self.cds, self.utr3)
+        utr5_end = utr5_len + len(KOZAK)
         try:
             report = score_sequence(
                 full_seq,
-                utr5_end=utr5_len,
-                cds_end=utr5_len + len(self.cds),
+                utr5_end=utr5_end,
+                cds_end=utr5_end + len(self.cds),
             )
             fitness = compute_fitness(report)
             out["F"] = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
@@ -88,5 +111,5 @@ class SequenceProblem(ElementwiseProblem):
         for row in X:
             utr5_len = int(row[0])
             utr5 = "".join(NUCLEOTIDES[row[1:utr5_len + 1]])
-            result.append(utr5 + self.cds + self.utr3)
+            result.append(assemble_mrna(utr5, self.cds, self.utr3))
         return result

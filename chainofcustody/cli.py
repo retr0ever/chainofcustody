@@ -10,6 +10,7 @@ from chainofcustody.evaluation.fitness import compute_fitness
 from chainofcustody.evaluation.report import print_batch_report, print_report, score_sequence
 from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
 from chainofcustody.optimization import METRIC_NAMES, SequenceProblem, run
+from chainofcustody.optimization.problem import KOZAK, assemble_mrna
 from chainofcustody.three_prime import generate_utr3
 
 console = Console()
@@ -98,8 +99,9 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
     results = []
     for i, seq in enumerate(sequences):
         utr5_len = int(X[i][0])
+        utr5_end = utr5_len + len(KOZAK)
         try:
-            report = score_sequence(seq, utr5_end=utr5_len, cds_end=utr5_len + len(cds))
+            report = score_sequence(seq, utr5_end=utr5_end, cds_end=utr5_end + len(cds))
             fitness = compute_fitness(report)
             results.append({"label": f"pareto_{i + 1}", "sequence": seq, "report": report, "fitness": fitness})
         except Exception:
