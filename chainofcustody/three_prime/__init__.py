@@ -6,7 +6,7 @@ miRNAs most highly and specifically expressed in that off-target cell type.
 """
 
 from chainofcustody.three_prime.filtering import load_data, mirnas_for_off_target_cell_type
-from chainofcustody.three_prime.generate_UTR3 import generate_mrna_sponge_utr
+from chainofcustody.three_prime.generate_utr3 import generate_mrna_sponge_utr
 
 
 def generate_utr3(

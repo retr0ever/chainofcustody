@@ -7,13 +7,13 @@ from chainofcustody.optimization.problem import N_NUCLEOTIDES, NUCLEOTIDES
 _NUCLEOTIDE_INDEX = {nt: i for i, nt in enumerate(NUCLEOTIDES)}
 
 # Shared UTR sequence used as seed for 5'UTR evolution and as the fixed 3'UTR.
-UTR_SEED = "GAGTAGTCCCTTCGCAAGCCCTCATTTCACCAGGCCCCCGGCTTGGGGCGCCTTCCTTCCCC"
+UTR_SEED = "GAGUAGUCCCUUCGCAAGCCCUCAUUUCACCAGGCCCCCGGCUUGGGGCGCCUUCCUUCCCC"
 
 
 def _encode(seq: str) -> np.ndarray:
     """Encode a nucleotide string to an integer array (A=0, C=1, G=2, U=3).
 
-    DNA thymine (T) is mapped to U so DNA seed sequences are accepted.
+    DNA thymine (T) is mapped to U so external DNA sequences are accepted.
     """
     return np.array([_NUCLEOTIDE_INDEX[nt.upper().replace("T", "U")] for nt in seq])
 

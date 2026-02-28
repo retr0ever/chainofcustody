@@ -1,8 +1,11 @@
+import logging
 import numpy as np
 from pymoo.core.problem import ElementwiseProblem
 
 from chainofcustody.evaluation.report import score_sequence
 from chainofcustody.evaluation.fitness import compute_fitness
+
+logger = logging.getLogger(__name__)
 
 # Nucleotide encoding: 0=A, 1=C, 2=G, 3=U
 NUCLEOTIDES = np.array(["A", "C", "G", "U"])
@@ -75,7 +78,8 @@ class SequenceProblem(ElementwiseProblem):
             )
             fitness = compute_fitness(report)
             out["F"] = np.array([1.0 - fitness["scores"][m]["value"] for m in METRIC_NAMES])
-        except Exception:
+        except Exception as exc:
+            logger.warning("Scoring failed for sequence %r…: %s", full_seq[:30], exc)
             out["F"] = np.ones(N_OBJECTIVES)
 
     def decode(self, X: np.ndarray) -> list[str]:

@@ -3,7 +3,6 @@ import requests
 
 _ENSEMBL_API = "https://rest.ensembl.org"
 _HEADERS = {"Content-Type": "application/json"}
-_mg = mygene.MyGeneInfo()
 
 
 class GeneNotFoundError(Exception):
@@ -11,7 +10,8 @@ class GeneNotFoundError(Exception):
 
 
 def _resolve_ensembl_gene_id(gene_symbol: str) -> str:
-    result = _mg.query(gene_symbol, species="human", fields="ensembl.gene", size=1)
+    mg = mygene.MyGeneInfo()
+    result = mg.query(gene_symbol, species="human", fields="ensembl.gene", size=1)
     hits = result.get("hits", [])
     if not hits:
         raise GeneNotFoundError(f"Gene '{gene_symbol}' not found")
@@ -56,7 +56,9 @@ def get_canonical_cds(gene_symbol: str) -> str:
         gene_symbol: HGNC gene symbol, e.g. "BRCA1".
 
     Returns:
-        The CDS nucleotide sequence as a string.
+        The CDS nucleotide sequence as a **DNA** string (A/T/G/C). Callers that
+        need RNA should convert with ``parser.clean_sequence()`` or
+        ``seq.replace("T", "U")``.
 
     Raises:
         GeneNotFoundError: If the gene or its canonical transcript cannot be found.

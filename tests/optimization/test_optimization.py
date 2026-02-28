@@ -9,7 +9,7 @@ from chainofcustody.optimization import (
     build_algorithm,
     run,
 )
-from chainofcustody.three_prime.generate_UTR3 import generate_mrna_sponge_utr
+from chainofcustody.three_prime.generate_utr3 import generate_mrna_sponge_utr
 
 N_METRICS = len(METRIC_NAMES)
 

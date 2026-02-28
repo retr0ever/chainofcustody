@@ -7,7 +7,7 @@ mRNA sequence design and evaluation pipeline for the Serova x Berlin Biohack cha
 ```
 chainofcustody/
   cli.py              # Single CLI entry point (chainofcustody command, optimize only)
-  initial/             # Gene fetching from Ensembl (get_canonical_cds)
+  cds/                # Gene fetching from Ensembl (get_canonical_cds)
   evaluation/          # 6-metric scoring pipeline
     parser.py          # Sequence parsing: FASTA loading, T->U normalisation, CDS boundary detection
     codons.py          # Metric 1: CAI, GC content, rare codon clusters, liver/target selectivity
@@ -27,6 +27,8 @@ chainofcustody/
   three_prime/         # 3'UTR generation (miRNA database, cell-type seed maps)
 data/
   MOESM3_ESM.xlsx      # Translation efficiency dataset (human, multiple cell types)
+scripts/               # One-time data preparation utilities (not part of the package)
+  merge_db.py          # Builds three_prime/db/ CSVs from Bioconductor microRNAome (requires R + rpy2)
 tests/                 # pytest suite (skip integration tests by default)
 ```
 
@@ -79,8 +81,7 @@ uv run pytest -x -v         # stop on first failure, verbose
 **Test structure:**
 - `tests/test_cli.py` — CLI integration tests (invoke via CliRunner, mock scoring pipeline)
 - `tests/optimization/test_optimization.py` — problem dimensions, operator shapes, end-to-end NSGA-III
-- `tests/initial/test_dummy.py` — Ensembl API mocks for `get_canonical_cds`
-- `tests/initial/test_integration.py` — live Ensembl fetch (marked `integration`, skipped by default)
+- `tests/cds/test_integration.py` — live Ensembl fetch (marked `integration`, skipped by default)
 - `tests/*/test_dummy.py` — placeholder tests for modules under development
 
 **Writing new tests:**
@@ -111,7 +112,6 @@ result = evolve(population=["AUGCCC..."], generations=20, mutation_rate=0.05)
 ## Incomplete modules
 
 - `five_prime/` — deleted placeholder, no 5'UTR generator yet
-- `three_prime/` — has miRNA database but no builder that generates 3'UTR sequences
 - `optimization/operators.py` — random nucleotide mutation, does **not** preserve protein sequence (unlike `evaluation/mutations.py` which does)
 - No concatenation step (5'UTR + CDS + 3'UTR assembly)
 

@@ -2,8 +2,8 @@
 
 Usage
 -----
-    python -m chainofcustody.three_prime.analysis --off-target-cell-type Hepatocyte_derived
-    python -m chainofcustody.three_prime.analysis --off-target-cell-type Hepatocyte_derived --threshold 500 --top 5
+    python -m chainofcustody.three_prime.filtering --off-target-cell-type Hepatocyte_derived
+    python -m chainofcustody.three_prime.filtering --off-target-cell-type Hepatocyte_derived --threshold 500 --top 5
 """
 
 from __future__ import annotations

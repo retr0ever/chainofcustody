@@ -38,7 +38,9 @@ def build_algorithm(
         pop_size: Number of individuals in the population.
         mutation_rate: Per-position probability of a point mutation.
     """
-    ref_dirs = get_reference_directions("das-dennis", N_OBJECTIVES, n_partitions=4)
+    # n_partitions=3 → 84 Das-Dennis reference points for 6 objectives,
+    # which fits within the default pop_size=128 (NSGA-III requires pop_size ≥ n_ref_points).
+    ref_dirs = get_reference_directions("das-dennis", N_OBJECTIVES, n_partitions=3)
 
     return NSGA3(
         ref_dirs=ref_dirs,

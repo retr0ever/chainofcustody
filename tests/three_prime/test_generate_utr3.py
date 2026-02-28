@@ -1,8 +1,8 @@
-"""Tests for chainofcustody.three_prime.generate_UTR3."""
+"""Tests for chainofcustody.three_prime.generate_utr3."""
 
 import pytest
 
-from chainofcustody.three_prime.generate_UTR3 import generate_mrna_sponge_utr
+from chainofcustody.three_prime.generate_utr3 import generate_mrna_sponge_utr
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

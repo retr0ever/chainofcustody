@@ -1,4 +1,20 @@
-"""db.py – Download and match databases: microRNAome, TargetScan seeds, miRBase.
+"""One-time data preparation script: download and merge miRNA databases.
+
+This script is NOT part of the installed ``chainofcustody`` package.
+Run it manually to regenerate the flat-file database used at runtime.
+
+Requirements (not listed in pyproject.toml — install separately):
+    - R (≥ 4.0) with Bioconductor and the ``microRNAome`` package
+    - rpy2 (pip install rpy2)
+
+Usage
+-----
+    python scripts/merge_db.py
+
+Outputs written to chainofcustody/three_prime/db/:
+    expression_matrix.csv   — miRNA × sample RPM matrix
+    sample_metadata.csv     — sample → cell type mapping
+    cell_type_seed_map.csv  — pre-joined cell-type × seed table
 
 Pipeline
 --------
@@ -24,7 +40,8 @@ from rpy2.robjects.conversion import localconverter
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-DB_DIR = Path(__file__).resolve().parent / "db"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+DB_DIR = _REPO_ROOT / "chainofcustody" / "three_prime" / "db"
 FAMILY_INFO_PATH = DB_DIR / "miR_Family_Info.txt"
 MATURE_FA_PATH = DB_DIR / "mature.fa"
 HUMAN_SPECIES_ID = 9606
