@@ -11,6 +11,7 @@ from chainofcustody.evaluation.report import print_batch_report, print_report
 from chainofcustody.cds import GeneNotFoundError, get_canonical_cds
 from chainofcustody.optimization import KOZAK, METRIC_NAMES, mRNASequence, SequenceProblem, assemble_mrna, run, score_parsed
 from chainofcustody.three_prime import generate_utr3
+from chainofcustody.progress import set_status_callback
 
 console = Console()
 
@@ -76,21 +77,30 @@ def main(gene: str, off_target_cell_type: str, utr5_min: int, utr5_max: int, pop
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]Evolving[/bold blue] {task.description}"),
+        TextColumn("[bold blue]{task.description}[/bold blue]"),
         BarColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(),
+        TextColumn("[dim]{task.fields[status]}[/dim]"),
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task("5'UTR", total=n_gen)
-        X, F, history = run(
-            utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3,
-            pop_size=pop_size, n_gen=n_gen,
-            mutation_rate=mutation_rate, seed=seed, n_workers=workers,
-            progress=progress, progress_task=task,
-        )
+        gen_task = progress.add_task(f"Evolving 5'UTR  (gen 0/{n_gen})", total=n_gen, status="starting…")
+
+        def _on_status(msg: str) -> None:
+            progress.update(gen_task, status=msg)
+
+        set_status_callback(_on_status)
+        try:
+            X, F, history = run(
+                utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3,
+                pop_size=pop_size, n_gen=n_gen,
+                mutation_rate=mutation_rate, seed=seed, n_workers=workers,
+                progress=progress, progress_task=gen_task,
+            )
+        finally:
+            set_status_callback(None)
 
     problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
     sequences = problem.decode(X)

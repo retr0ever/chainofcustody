@@ -4,29 +4,13 @@ import pytest
 from chainofcustody.sequence import mRNASequence
 from chainofcustody.evaluation.ribonn import (
     _RIBONN_DIR,
-    _aggregate,
-    _score_with_dir,
+    _null_result,
     _te_status,
     score_ribonn,
+    score_ribonn_batch,
 )
 
 _PARSED = mRNASequence(utr5="AAAAAA", cds="AUGCCCAAGUAA", utr3="CCCGGG")
-
-
-def _mock_predictions(hela: float = 1.8, hepg2: float = 1.2, folds: int = 2) -> pd.DataFrame:
-    """Build a fake multi-fold predictions DataFrame like RiboNN returns."""
-    rows = []
-    for fold in range(folds):
-        rows.append({
-            "tx_id": "query",
-            "utr5_sequence": "AAAAAA",
-            "cds_sequence": "AUGCCCAAGUAA",
-            "utr3_sequence": "CCCGGG",
-            "predicted_TE_HeLa": hela,
-            "predicted_TE_HepG2": hepg2,
-            "fold": fold,
-        })
-    return pd.DataFrame(rows)
 
 
 # ── Submodule path ───────────────────────────────────────────────────────────
@@ -53,80 +37,62 @@ def test_te_status_red():
     assert _te_status(0.0) == "RED"
 
 
-# ── _aggregate (pure function) ───────────────────────────────────────────────
+# ── _null_result ─────────────────────────────────────────────────────────────
 
-def test_aggregate_mean_te():
-    df = _mock_predictions(hela=1.8, hepg2=1.2, folds=3)
-    result = _aggregate(df)
+def test_null_result_shape():
+    r = _null_result()
+    assert r["mean_te"] == 0.0
+    assert r["status"] == "RED"
+    assert r["per_tissue"] is None
+
+
+# ── score_ribonn (single-sequence, mocked predictor) ─────────────────────────
+
+def _make_fake_result(mean_te: float = 1.5) -> dict:
+    return {
+        "mean_te": mean_te,
+        "per_tissue": {"HeLa": 1.8, "HepG2": 1.2},
+        "status": _te_status(mean_te),
+        "message": f"RiboNN predicted mean TE = {mean_te:.4f}",
+    }
+
+
+def test_score_ribonn_delegates_to_predictor(mocker):
+    """score_ribonn should call get_predictor().predict_batch and return its result."""
+    fake_predictor = mocker.MagicMock()
+    fake_predictor.predict_batch.return_value = [_make_fake_result(1.5)]
+    mocker.patch("chainofcustody.evaluation.ribonn.get_predictor", return_value=fake_predictor)
+
+    result = score_ribonn(_PARSED)
+
+    fake_predictor.predict_batch.assert_called_once_with([_PARSED])
     assert result["mean_te"] == pytest.approx(1.5, abs=1e-4)
     assert result["status"] == "GREEN"
-    assert "HeLa" in result["per_tissue"]
-    assert result["per_tissue"]["HeLa"] == pytest.approx(1.8)
 
 
-def test_aggregate_no_available_key():
-    result = _aggregate(_mock_predictions())
-    assert "available" not in result
+def test_score_ribonn_batch_delegates_to_predictor(mocker):
+    """score_ribonn_batch should call get_predictor().predict_batch."""
+    seqs = [_PARSED, _PARSED]
+    fake_results = [_make_fake_result(1.5), _make_fake_result(0.8)]
+    fake_predictor = mocker.MagicMock()
+    fake_predictor.predict_batch.return_value = fake_results
+    mocker.patch("chainofcustody.evaluation.ribonn.get_predictor", return_value=fake_predictor)
+
+    results = score_ribonn_batch(seqs)
+
+    fake_predictor.predict_batch.assert_called_once_with(seqs)
+    assert len(results) == 2
+    assert results[0]["status"] == "GREEN"
+    assert results[1]["status"] == "RED"
 
 
-def test_aggregate_tissue_names_stripped():
-    result = _aggregate(_mock_predictions())
-    assert all(not k.startswith("predicted_") for k in result["per_tissue"])
-    assert all(not k.startswith("TE_") for k in result["per_tissue"])
+def test_score_ribonn_result_keys(mocker):
+    """Result dict must contain the expected keys."""
+    fake_predictor = mocker.MagicMock()
+    fake_predictor.predict_batch.return_value = [_make_fake_result()]
+    mocker.patch("chainofcustody.evaluation.ribonn.get_predictor", return_value=fake_predictor)
 
-
-def test_aggregate_amber():
-    df = _mock_predictions(hela=1.1, hepg2=1.3)
-    assert _aggregate(df)["status"] == "AMBER"
-
-
-def test_aggregate_red():
-    df = _mock_predictions(hela=0.5, hepg2=0.8)
-    assert _aggregate(df)["status"] == "RED"
-
-
-# ── _score_with_dir (mocked prediction fn) ──────────────────────────────────
-
-def _fake_runs_csv(tmp_path: "Path") -> pd.DataFrame:
-    """Create a minimal runs.csv and return as DataFrame."""
-    runs = pd.DataFrame({"run_id": ["abc123"], "params.test_fold": [0]})
-    (tmp_path / "models" / "human").mkdir(parents=True)
-    runs.to_csv(tmp_path / "models" / "human" / "runs.csv", index=False)
-    return runs
-
-
-def test_score_with_dir_success(tmp_path, mocker):
-    _fake_runs_csv(tmp_path)
-
-    from chainofcustody.evaluation.ribonn import _ensure_importable
-    _ensure_importable()
-    import src.predict as src_predict
-
-    mocker.patch.object(
-        src_predict,
-        "predict_using_nested_cross_validation_models",
-        side_effect=lambda *a, **kw: _mock_predictions(),
-    )
-
-    result = _score_with_dir(_PARSED, tmp_path)
-
-    assert result["mean_te"] == pytest.approx(1.5, abs=1e-4)
-    assert result["status"] == "GREEN"
-    assert "available" not in result
-
-
-def test_score_with_dir_propagates_exception(tmp_path, mocker):
-    _fake_runs_csv(tmp_path)
-
-    from chainofcustody.evaluation.ribonn import _ensure_importable
-    _ensure_importable()
-    import src.predict as src_predict
-
-    mocker.patch.object(
-        src_predict,
-        "predict_using_nested_cross_validation_models",
-        side_effect=RuntimeError("model weights missing"),
-    )
-
-    with pytest.raises(RuntimeError, match="model weights missing"):
-        _score_with_dir(_PARSED, tmp_path)
+    result = score_ribonn(_PARSED)
+    assert set(result.keys()) == {"mean_te", "per_tissue", "status", "message"}
+    assert all(not k.startswith("predicted_") for k in (result["per_tissue"] or {}))
+    assert all(not k.startswith("TE_") for k in (result["per_tissue"] or {}))

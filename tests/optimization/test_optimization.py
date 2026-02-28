@@ -22,6 +22,26 @@ _UTR3 = generate_mrna_sponge_utr(["UAGCUUAUCAGACUGAUGUUGA"], num_sites=2)["full_
 _UTR5_MIN = 4
 _UTR5_MAX = 20
 
+_NULL_RIBONN = {
+    "mean_te": 1.0,
+    "per_tissue": None,
+    "status": "AMBER",
+    "message": "mocked",
+}
+
+
+@pytest.fixture(autouse=True)
+def mock_ribonn(mocker):
+    """Prevent RiboNN from loading GPU models in optimization unit tests."""
+    mocker.patch(
+        "chainofcustody.evaluation.ribonn.score_ribonn_batch",
+        side_effect=lambda seqs: [_NULL_RIBONN] * len(seqs),
+    )
+    mocker.patch(
+        "chainofcustody.evaluation.ribonn.score_ribonn",
+        return_value=_NULL_RIBONN,
+    )
+
 
 def _problem(utr5_min: int = _UTR5_MIN, utr5_max: int = _UTR5_MAX) -> SequenceProblem:
     return SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=_CDS, utr3=_UTR3)
@@ -45,7 +65,7 @@ def test_problem_bounds():
 
 
 def test_problem_evaluate_shape():
-    """ElementwiseProblem._evaluate receives a single row; drive via evaluate()."""
+    """Vectorized _evaluate receives a full population matrix; drive via evaluate()."""
     problem = _problem()
     # Column 0 = length in [utr5_min, utr5_max], columns 1+ = nucleotides
     X = np.column_stack([

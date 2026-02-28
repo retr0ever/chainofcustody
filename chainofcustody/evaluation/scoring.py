@@ -10,12 +10,16 @@ from chainofcustody.evaluation.ribonn import score_ribonn
 def score_parsed(
     parsed: mRNASequence,
     target: str | None = None,
+    _ribonn_scores: dict | None = None,
 ) -> dict:
     """Run all 4 evaluation metrics on an already-parsed mRNA sequence.
 
     Args:
         parsed: An ``mRNASequence`` whose regions are correctly delimited.
         target: Unused — reserved for future per-cell-type scoring.
+        _ribonn_scores: Pre-computed RiboNN result dict. When provided (e.g.
+            from a batch call during optimisation), the RiboNN model is not
+            invoked again. For internal / optimiser use only.
 
     Returns:
         Full report dict with keys: ``sequence_info``, ``structure_scores``,
@@ -25,7 +29,7 @@ def score_parsed(
     structure_scores = score_structure(parsed)
     manufacturing_scores = score_manufacturing(parsed)
     stability_scores = score_stability(parsed)
-    ribonn_scores = score_ribonn(parsed)
+    ribonn_scores = _ribonn_scores if _ribonn_scores is not None else score_ribonn(parsed)
 
     mfg_violations = manufacturing_scores.get("total_violations", 0)
 

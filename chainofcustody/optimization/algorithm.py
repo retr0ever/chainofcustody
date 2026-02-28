@@ -1,12 +1,8 @@
-import os
-from multiprocessing.pool import Pool
-
 import numpy as np
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.core.callback import Callback
 from pymoo.operators.crossover.ux import UniformCrossover
 from pymoo.optimize import minimize
-from pymoo.parallelization.starmap import StarmapParallelization
 from pymoo.util.ref_dirs import get_reference_directions
 
 from chainofcustody.evaluation.fitness import DEFAULT_WEIGHTS
@@ -14,19 +10,23 @@ from chainofcustody.optimization.operators import NucleotideMutation, Nucleotide
 from chainofcustody.sequence import KOZAK
 from chainofcustody.optimization.problem import METRIC_NAMES, N_OBJECTIVES, NUCLEOTIDES, SequenceProblem, assemble_mrna
 
-_DEFAULT_WORKERS = os.cpu_count() or 1
-
 
 class _ProgressCallback(Callback):
     """Advance a Rich progress bar by one step after each generation."""
 
-    def __init__(self, progress, task) -> None:
+    def __init__(self, progress, task, n_gen: int) -> None:
         super().__init__()
         self._progress = progress
         self._task = task
+        self._n_gen = n_gen
 
     def notify(self, algorithm) -> None:
-        self._progress.advance(self._task)
+        gen = algorithm.n_gen
+        self._progress.update(
+            self._task,
+            advance=1,
+            description=f"Evolving 5'UTR  (gen {gen}/{self._n_gen})",
+        )
 
 
 def build_algorithm(
@@ -92,6 +92,11 @@ def run(
     length (which varies between utr5_min and utr5_max). The CDS and 3'UTR are
     fixed and concatenated to the evolved 5'UTR before each evaluation.
 
+    RiboNN inference is batched across the whole population each generation,
+    keeping GPU utilisation high. The ``n_workers`` argument is accepted for
+    API compatibility but ignored — multiprocessing is not used because the
+    GPU-batched evaluator is already faster and CUDA cannot be forked safely.
+
     Args:
         utr5_min: Minimum allowed 5'UTR length.
         utr5_max: Maximum allowed 5'UTR length.
@@ -102,9 +107,7 @@ def run(
         mutation_rate: Per-position point-mutation probability.
         seed: Random seed for reproducibility.
         verbose: Print per-generation progress.
-        n_workers: Number of worker processes for parallel fitness evaluation.
-            Defaults to the number of logical CPU cores. Pass ``1`` to run
-            single-threaded (no pool overhead).
+        n_workers: Ignored. Kept for API compatibility.
         progress: Optional Rich Progress instance for a live progress bar.
         progress_task: Task ID returned by ``progress.add_task``.
 
@@ -114,9 +117,14 @@ def run(
         and ``history`` is a list of per-generation population records
         (full assembled sequences) suitable for CSV export.
     """
-    workers = n_workers if n_workers is not None else _DEFAULT_WORKERS
-
     algorithm = build_algorithm(pop_size=pop_size, mutation_rate=mutation_rate)
+    problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
+
+    from chainofcustody.progress import update_status  # noqa: PLC0415
+    update_status("loading RiboNN models into GPU…")
+    from chainofcustody.evaluation.ribonn import get_predictor  # noqa: PLC0415
+    get_predictor()  # warm up — loads all 50 models once before timing starts
+    update_status("RiboNN ready")
 
     minimize_kwargs = dict(
         termination=("n_gen", n_gen),
@@ -126,15 +134,7 @@ def run(
     )
 
     if progress is not None:
-        minimize_kwargs["callback"] = _ProgressCallback(progress, progress_task)
+        minimize_kwargs["callback"] = _ProgressCallback(progress, progress_task, n_gen)
 
-    if workers == 1:
-        problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3)
-        result = minimize(problem, algorithm, **minimize_kwargs)
-    else:
-        with Pool(workers) as pool:
-            runner = StarmapParallelization(pool.starmap)
-            problem = SequenceProblem(utr5_min=utr5_min, utr5_max=utr5_max, cds=cds, utr3=utr3, elementwise_runner=runner)
-            result = minimize(problem, algorithm, **minimize_kwargs)
-
+    result = minimize(problem, algorithm, **minimize_kwargs)
     return result.X, result.F, _build_history(result, cds, utr3)
